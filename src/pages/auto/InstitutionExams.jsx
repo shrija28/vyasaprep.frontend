@@ -118,11 +118,7 @@ const InstitutionExams = () => {
 
       const data = await res.json();
       if (res.ok) {
-<<<<<<< HEAD:frontend-react/src/pages/auto/InstitutionExams.jsx
-        setSuccessMsg(`Exam "${data.exam_name}" created successfully and assigned to ${data.batch_name || 'All Batches'}!`);
-=======
         setSuccessMsg(`Exam "${data.exam_name}" created successfully! Click "View Questions" below to inspect the assigned questions.`);
->>>>>>> ec47da2 (updated few features):frontend/src/pages/auto/InstitutionExams.jsx
         setExamName('');
         setScheduledStart('');
         setScheduledEnd('');
@@ -208,7 +204,7 @@ const InstitutionExams = () => {
               onClick={fetchData}
               style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>
               Refresh
             </button>
           </div>
@@ -230,7 +226,7 @@ const InstitutionExams = () => {
         <div className="section-card" style={{ marginBottom: '24px' }}>
           <div className="section-card-header">
             <div className="section-icon" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(37,99,235,0.2))' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
             </div>
             <div>
               <h2>Create & Assign Weekly Test</h2>
@@ -373,7 +369,7 @@ const InstitutionExams = () => {
                   disabled={creating}
                   style={{ minWidth: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                   {creating ? 'Generating 4 Sets...' : 'Create & Schedule Exam'}
                 </button>
               </div>
@@ -386,7 +382,7 @@ const InstitutionExams = () => {
           <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div className="section-icon" style={{ background: 'linear-gradient(135deg, rgba(8,145,178,0.2), rgba(5,150,105,0.2))' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="9" y1="21" x2="9" y2="9" /></svg>
               </div>
               <div>
                 <h2>Scheduled Weekly Exams ({exams.length})</h2>
