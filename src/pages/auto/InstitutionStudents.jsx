@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { generateStudentId } from '../../utils/studentId';
 
 const InstitutionStudents = () => {
   const [batches, setBatches] = useState([]);
@@ -181,11 +182,7 @@ const InstitutionStudents = () => {
     }
   };
 
-  const filteredStudents = selectedBatchFilter === 'all'
-    ? students
-    : selectedBatchFilter === 'unassigned'
-      ? students.filter(s => !s.batch_id)
-      : students.filter(s => s.batch_id === selectedBatchFilter);
+  const filteredStudents = students;
 
   return (
     <>
@@ -195,22 +192,13 @@ const InstitutionStudents = () => {
         <header className="institution-page-header">
           <div>
             <h1 className="institution-page-title">
-              Manage <span className="institution-page-title-accent">Batches & Students</span>
+              Manage <span className="institution-page-title-accent">Students</span>
             </h1>
             <p className="institution-page-sub">
-              Organize classes into batches, assign weekly tests, and onboard students
+              Onboard and manage your institution students
             </p>
           </div>
           <div className="institution-page-actions" style={{ display: 'flex', gap: '12px' }}>
-            <button
-              type="button"
-              className="btn-institution-outline"
-              onClick={() => setShowBatchModal(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              + Create Batch
-            </button>
             <button
               type="button"
               className="btn-institution"
@@ -238,74 +226,6 @@ const InstitutionStudents = () => {
           </div>
         )}
 
-        {/* 1. Batches Overview */}
-        <section className="section-card" style={{ marginBottom: '24px' }}>
-          <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div className="section-icon" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(59,130,246,0.2))' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-              </div>
-              <div>
-                <h2>Institution Batches / Sections</h2>
-                <p className="section-sub">Classes and cohorts for targeted testing and rank tracking</p>
-              </div>
-            </div>
-            <span style={{ fontSize: '0.85rem', color: 'var(--muted)', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '20px' }}>
-              {batches.length} Active {batches.length === 1 ? 'Batch' : 'Batches'}
-            </span>
-          </div>
-
-          <div className="section-body">
-            {batches.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--muted)' }}>
-                <p>No batches created yet. Create sections like "PUC-II Section A" to assign tests to specific classes.</p>
-                <button
-                  type="button"
-                  className="btn-institution-outline"
-                  style={{ marginTop: '12px' }}
-                  onClick={() => setShowBatchModal(true)}
-                >
-                  + Create First Batch
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
-                {batches.map((b) => (
-                  <div
-                    key={b.id}
-                    style={{
-                      border: selectedBatchFilter === b.id ? '1px solid var(--purple-l)' : '1px solid var(--border)',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      background: selectedBatchFilter === b.id ? 'rgba(167, 139, 250, 0.08)' : 'rgba(255,255,255,0.02)',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <h3 style={{ fontSize: '1.05rem', margin: 0, color: 'var(--text)' }}>{b.name}</h3>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBatch(b.id, b.name)}
-                        title="Delete Batch"
-                        style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px 4px' }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {b.description && (
-                      <p style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: '6px 0 12px' }}>{b.description}</p>
-                    )}
-                    <div style={{ display: 'flex', gap: '16px', fontSize: '0.82rem', marginTop: '12px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-                      <span>👥 <strong style={{ color: 'var(--text)' }}>{b.student_count}</strong> Students</span>
-                      <span>📝 <strong style={{ color: 'var(--text)' }}>{b.exam_count}</strong> Tests</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
         {/* 2. Linked Students Table */}
         <section className="section-card">
           <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
@@ -315,27 +235,8 @@ const InstitutionStudents = () => {
               </div>
               <div>
                 <h2>Enrolled Students ({students.length})</h2>
-                <p className="section-sub">View students and assign them to specific batches</p>
+                <p className="section-sub">View all registered institution students</p>
               </div>
-            </div>
-
-            {/* Filter by Batch */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Filter by Batch:</span>
-              <select
-                className="text-input"
-                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
-                value={selectedBatchFilter}
-                onChange={(e) => setSelectedBatchFilter(e.target.value)}
-              >
-                <option value="all">All Batches ({students.length})</option>
-                <option value="unassigned">Unassigned ({students.filter(s => !s.batch_id).length})</option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name} ({b.student_count})
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
 
@@ -344,7 +245,7 @@ const InstitutionStudents = () => {
               <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>Loading students...</div>
             ) : filteredStudents.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)' }}>
-                No students found in this filter. Click "Invite Student" to add members.
+                No students found. Click "Invite Student" to add members.
               </div>
             ) : (
               <div className="responsive-table-wrapper">
@@ -353,7 +254,6 @@ const InstitutionStudents = () => {
                     <tr>
                       <th>Student Name</th>
                       <th>Email</th>
-                      <th>Assigned Batch</th>
                       <th>Linked Date</th>
                       <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
@@ -363,24 +263,9 @@ const InstitutionStudents = () => {
                       <tr key={s.user_id}>
                         <td>
                           <div style={{ fontWeight: 600, color: 'var(--text)' }}>{s.display_name}</div>
-                          {s.kcet_student_id && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>ID: {s.kcet_student_id}</span>
-                          )}
+                          <span style={{ fontSize: '0.75rem', color: 'var(--purple-l)' }}>ID: {generateStudentId({ ...s, is_institutional: true })}</span>
                         </td>
                         <td style={{ color: 'var(--muted)', fontSize: '0.88rem' }}>{s.email}</td>
-                        <td>
-                          <select
-                            className="text-input"
-                            style={{ padding: '4px 8px', fontSize: '0.82rem', width: 'auto', minWidth: '160px' }}
-                            value={s.batch_id || ''}
-                            onChange={(e) => handleAssignBatch(s.user_id, e.target.value)}
-                          >
-                            <option value="">— Unassigned —</option>
-                            {batches.map((b) => (
-                              <option key={b.id} value={b.id}>{b.name}</option>
-                            ))}
-                          </select>
-                        </td>
                         <td style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
                           {s.linked_at ? new Date(s.linked_at).toLocaleDateString() : '—'}
                         </td>
@@ -421,7 +306,6 @@ const InstitutionStudents = () => {
                   <thead>
                     <tr>
                       <th>Invite Code</th>
-                      <th>Target Batch</th>
                       <th>Status</th>
                       <th>Expires At</th>
                       <th style={{ textAlign: 'right' }}>Copy</th>
@@ -429,16 +313,12 @@ const InstitutionStudents = () => {
                   </thead>
                   <tbody>
                     {invitations.slice(0, 10).map((inv, idx) => {
-                      const matchedBatch = batches.find(b => b.id === inv.batch_id);
                       return (
                         <tr key={idx}>
                           <td>
                             <span style={{ fontFamily: 'monospace', background: 'rgba(167, 139, 250, 0.1)', color: 'var(--purple-l)', padding: '3px 6px', borderRadius: '4px' }}>
                               {inv.code.slice(0, 16)}...
                             </span>
-                          </td>
-                          <td style={{ fontSize: '0.85rem' }}>
-                            {matchedBatch ? <span style={{ color: 'var(--blue)' }}>{matchedBatch.name}</span> : <span style={{ color: 'var(--muted)' }}>General (Any Batch)</span>}
                           </td>
                           <td>
                             <span style={{
@@ -478,72 +358,6 @@ const InstitutionStudents = () => {
         </section>
       </main>
 
-      {/* Modal: Create Batch */}
-      {showBatchModal && (
-        <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="modal-dialog" style={{ width: '420px', maxWidth: '90vw', background: '#13141f', border: '1px solid var(--border)', borderRadius: '12px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text)' }}>Create New Batch</h2>
-              <button
-                type="button"
-                onClick={() => setShowBatchModal(false)}
-                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.4rem', cursor: 'pointer' }}
-              >
-                &times;
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateBatch}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                  Batch / Section Name *
-                </label>
-                <input
-                  type="text"
-                  className="text-input"
-                  style={{ width: '100%' }}
-                  placeholder="e.g. PUC-II Section A"
-                  value={newBatchName}
-                  onChange={(e) => setNewBatchName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                  Description (Optional)
-                </label>
-                <input
-                  type="text"
-                  className="text-input"
-                  style={{ width: '100%' }}
-                  placeholder="e.g. Science Morning Cohort"
-                  value={newBatchDesc}
-                  onChange={(e) => setNewBatchDesc(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                <button
-                  type="button"
-                  className="btn-institution-outline"
-                  onClick={() => setShowBatchModal(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn-institution"
-                  disabled={creatingBatch}
-                >
-                  {creatingBatch ? 'Creating...' : 'Create Batch'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Modal: Invite Student */}
       {showInviteModal && (
         <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -562,25 +376,8 @@ const InstitutionStudents = () => {
             {!generatedInvite ? (
               <div>
                 <p style={{ fontSize: '0.88rem', color: 'var(--muted)', marginBottom: '16px' }}>
-                  Generate a single-use onboarding link for a student. You can pre-assign them to a specific batch.
+                  Generate a single-use onboarding link for a student to join your institution.
                 </p>
-
-                <div style={{ marginBottom: '20px' }}>
-                  <label style={{ display: 'block', marginBottom: '6px', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                    Assign to Batch
-                  </label>
-                  <select
-                    className="text-input"
-                    style={{ width: '100%' }}
-                    value={inviteBatchId}
-                    onChange={(e) => setInviteBatchId(e.target.value)}
-                  >
-                    <option value="">— Unassigned (Student chooses or faculty assigns later) —</option>
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                   <button

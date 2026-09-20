@@ -21,7 +21,6 @@ import AdminInstitutions from './pages/auto/AdminInstitutions';
 import AdminQuestions from './pages/auto/AdminQuestions';
 import AdminStudentManage from './pages/auto/AdminStudentManage';
 import AdminStudents from './pages/auto/AdminStudents';
-import AdminSubscriptions from './pages/auto/AdminSubscriptions';
 import AdminSyllabus from './pages/auto/AdminSyllabus';
 import AdminTextbookUpload from './pages/auto/AdminTextbookUpload';
 import AdminUpload from './pages/auto/AdminUpload';
@@ -33,11 +32,9 @@ import Index from './pages/auto/Index';
 import InstitutionAnalytics from './pages/auto/InstitutionAnalytics';
 import InstitutionDashboard from './pages/auto/InstitutionDashboard';
 import InstitutionExams from './pages/auto/InstitutionExams';
-import InstitutionPricing from './pages/auto/InstitutionPricing';
 import InstitutionQuestions from './pages/auto/InstitutionQuestions';
 import InstitutionRegister from './pages/auto/InstitutionRegister';
 import InstitutionStudents from './pages/auto/InstitutionStudents';
-import InstitutionSubscription from './pages/auto/InstitutionSubscription';
 import InstitutionSyllabus from './pages/auto/InstitutionSyllabus';
 import InstitutionUpload from './pages/auto/InstitutionUpload';
 import InvitationAccept from './pages/auto/InvitationAccept';
@@ -49,9 +46,6 @@ import StudentInstitutionDashboard from './pages/auto/StudentInstitutionDashboar
 import StudentInstitutionExams from './pages/auto/StudentInstitutionExams';
 import StudentInstitutionLeaderboard from './pages/auto/StudentInstitutionLeaderboard';
 import StudentInstitutionPerformance from './pages/auto/StudentInstitutionPerformance';
-import StudentPricing from './pages/auto/StudentPricing';
-import Subscription from './pages/auto/Subscription';
-import RazorpaySubscription from './pages/RazorpaySubscription';
 import Syllabus from './pages/auto/Syllabus';
 
 // Public Layout Wrapper
@@ -81,9 +75,9 @@ function App() {
           <Route element={<StudentLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/exam" element={<Exam />} />
-            <Route path="/subscription" element={<RazorpaySubscription />} />
+            <Route path="/subscription" element={<Navigate to="/dashboard" replace />} />
             <Route path="/syllabus" element={<Syllabus />} />
-            <Route path="/student-pricing" element={<StudentPricing />} />
+            <Route path="/student-pricing" element={<Navigate to="/dashboard" replace />} />
             
             {/* Institution Specific Student Routes */}
             <Route path="/student-institution-dashboard" element={<StudentInstitutionDashboard />} />
@@ -102,7 +96,7 @@ function App() {
             <Route path="questions" element={<AdminQuestions />} />
             <Route path="student-manage" element={<AdminStudentManage />} />
             <Route path="students" element={<AdminStudents />} />
-            <Route path="subscriptions" element={<AdminSubscriptions />} />
+            <Route path="subscriptions" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="syllabus" element={<AdminSyllabus />} />
             <Route path="textbook-upload" element={<AdminTextbookUpload />} />
             <Route path="upload" element={<AdminUpload />} />
@@ -114,10 +108,10 @@ function App() {
             <Route path="analytics" element={<InstitutionAnalytics />} />
             <Route path="dashboard" element={<InstitutionDashboard />} />
             <Route path="exams" element={<InstitutionExams />} />
-            <Route path="pricing" element={<InstitutionPricing />} />
+            <Route path="pricing" element={<Navigate to="/institution/dashboard" replace />} />
             <Route path="questions" element={<InstitutionQuestions />} />
             <Route path="students" element={<InstitutionStudents />} />
-            <Route path="subscription" element={<InstitutionSubscription />} />
+            <Route path="subscription" element={<Navigate to="/institution/dashboard" replace />} />
             <Route path="syllabus" element={<InstitutionSyllabus />} />
             <Route path="upload" element={<InstitutionUpload />} />
           </Route>

@@ -47,30 +47,13 @@ const InstitutionAnalytics = () => {
         <header className="institution-page-header" style={{ marginBottom: '24px' }}>
           <div>
             <h1 className="institution-page-title">
-              Batch <span className="institution-page-title-accent">Analytics & Rankings</span>
+              Institution <span className="institution-page-title-accent">Analytics & Rankings</span>
             </h1>
             <p className="institution-page-sub">
               Track student test participation, score averages, and class rank leaderboards
             </p>
           </div>
           <div className="institution-page-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            {/* Batch Filter Dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Select Cohort:</span>
-              <select
-                className="text-input"
-                style={{ padding: '6px 12px', fontSize: '0.85rem', minWidth: '180px' }}
-                value={selectedBatch}
-                onChange={(e) => setSelectedBatch(e.target.value)}
-              >
-                <option value="all">All Institution Batches</option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             <button
               type="button"

@@ -4,6 +4,8 @@ import {
 } from 'chart.js';
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
+import { generateStudentId } from '../../utils/studentId';
+
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler);
 
 const Dashboard = () => {
@@ -58,7 +60,14 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/student/dashboard-stats', { credentials: 'include' });
+      let res = await fetch('/api/student/dashboard-stats', { credentials: 'include' });
+      if (!res.ok) {
+        res = await fetch('/api/student/dashboard', { credentials: 'include' });
+      }
+      if (!res.ok) {
+        res = await fetch('/api/student/analytics', { credentials: 'include' });
+      }
+
       if (res.ok) {
         const d = await res.json();
         setData(d);
@@ -80,7 +89,8 @@ const Dashboard = () => {
         if (d.authenticated) {
           setStudentProfile({
             name: d.display_name || d.sub || 'Student',
-            id: d.kcet_student_id || d.sub || '—'
+            id: generateStudentId(d),
+            institutionName: d.institution_name || d.institution_code || (d.student_subtype === 'institutional' ? (d.join_code || 'Institution Member') : null)
           });
         }
       })
@@ -309,6 +319,14 @@ const Dashboard = () => {
                     {studentProfile.id}
                   </div>
                 </div>
+                {studentProfile.institutionName && (
+                  <div>
+                    <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Institution:</div>
+                    <div style={{ fontSize: '1.1rem', fontWeight: '600', color: '#10b981' }} id="studentInstitution">
+                      🏫 {studentProfile.institutionName}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             {data && !data.has_data && (
@@ -617,129 +635,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Rank Booster ("What If I Improve?") + 3-Step Action Plan Checklist */}
-            <div className="ai-enhancement-grid">
-              {/* Option 3: Score & Rank Impact Booster */}
-              <div className="enhancement-card booster">
-                <div className="enhancement-header">
-                  <div className="enhancement-title">
-                    <span>🚀</span>
-                    <span>Score &amp; Rank Impact Booster</span>
-                  </div>
-                  <span className="enhancement-badge badge-green">What If I Improve?</span>
-                </div>
-
-                <div className="rank-booster-comparison">
-                  <div className="rank-tile">
-                    <div className="rank-tile-label">Current Rank</div>
-                    <div className="rank-tile-value" style={{ color: 'var(--muted)' }}>
-                      #{currentRank.toLocaleString()}
-                    </div>
-                    <div className="rank-tile-sub">Score: {currentAvgScore}%</div>
-                  </div>
-
-                  <div className="rank-arrow-indicator">
-                    <span className="rank-arrow-icon">➔</span>
-                    <span className="rank-leap-badge">+{simulatedRankLeap.toLocaleString()} Ranks</span>
-                  </div>
-
-                  <div className="rank-tile">
-                    <div className="rank-tile-label" style={{ color: '#10b981' }}>Projected Boost</div>
-                    <div className="rank-tile-value" style={{ color: '#10b981' }}>
-                      #{simulatedBoostedRank.toLocaleString()}
-                    </div>
-                    <div className="rank-tile-sub" style={{ color: '#10b981' }}>
-                      Target: {simulatedTargetScore}%
-                    </div>
-                  </div>
-                </div>
-
-                <div className="simulator-controls">
-                  <div className="simulator-label">
-                    <span>Simulate Weak Topic Mastery:</span>
-                    <span style={{ fontWeight: '700', color: '#10b981' }}>+{simulatedMarksGain} Marks in KCET</span>
-                  </div>
-                  <div className="simulator-buttons">
-                    {[5, 10, 15, 20].map((boostVal) => (
-                      <button
-                        key={boostVal}
-                        type="button"
-                        className={`sim-btn ${simulatedBoostPct === boostVal ? 'active' : ''}`}
-                        onClick={() => setSimulatedBoostPct(boostVal)}
-                      >
-                        +{boostVal}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="booster-footer-note">
-                  🎯 <strong>Rank Opportunity:</strong> Gaining +{simulatedMarksGain} marks elevates your rank by ~{simulatedRankLeap.toLocaleString()} positions, unlocking more competitive CSE/ECE branches in the KCET Predictor below!
-                </div>
-              </div>
-
-              {/* Option 2: 3-Step Action Plan & Interactive Checklist */}
-              <div className="enhancement-card checklist">
-                <div className="enhancement-header">
-                  <div className="enhancement-title">
-                    <span>📋</span>
-                    <span>3-Step Study Action Plan</span>
-                  </div>
-                  <span className="enhancement-badge badge-purple">
-                    {completedStepsCount} of {actionSteps.length} Done ({progressPct}%)
-                  </span>
-                </div>
-
-                <div className="checklist-progress-container">
-                  <div className="checklist-progress-header">
-                    <span>Task Progress</span>
-                    <span>{progressPct}% Completed</span>
-                  </div>
-                  <div className="checklist-progress-track">
-                    <div className="checklist-progress-fill" style={{ width: `${progressPct}%` }} />
-                  </div>
-                </div>
-
-                <ul className="action-checklist-list">
-                  {actionSteps.map((step) => {
-                    const isDone = !!checkedActionSteps[step.id];
-                    return (
-                      <li
-                        key={step.id}
-                        className={`checklist-item ${isDone ? 'done' : ''}`}
-                        onClick={() => toggleActionStep(step.id)}
-                      >
-                        <div className="checklist-checkbox">
-                          {isDone && (
-                            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" strokeWidth="3" fill="none">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="checklist-content">
-                          <div className="checklist-meta">
-                            <span className="checklist-step-badge">{step.badge || 'Step'} • {step.category || 'Focus'}</span>
-                          </div>
-                          <div className="checklist-item-title">{step.title}</div>
-                          <div className="checklist-item-desc">{step.desc}</div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-
-                <div className="checklist-actions">
-                  <span style={{ fontSize: '0.72rem', color: 'var(--muted)' }}>
-                    {progressPct === 100 ? '🎉 All tasks completed! Great job.' : 'Click to check off tasks as you complete them'}
-                  </span>
-                  {completedStepsCount > 0 && (
-                    <button type="button" className="checklist-reset-btn" onClick={resetActionSteps}>
-                      Reset
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+            {/* End AI Zones */}
           </div>
 
           {/* KCET College Prediction based on Rank Section */}

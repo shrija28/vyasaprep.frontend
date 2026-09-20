@@ -78,7 +78,7 @@ const InvitationAccept = () => {
           >
             <li>Access to your institution's curated exams</li>
             <li>Personalized analytics and progress tracking</li>
-            <li>Coverage under your institution's subscription</li>
+            <li>Full access to your institution's prep portal</li>
           </ul>
         </div>
 

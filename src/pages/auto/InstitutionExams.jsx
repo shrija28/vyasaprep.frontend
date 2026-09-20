@@ -174,14 +174,9 @@ const InstitutionExams = () => {
     }
   };
 
-  const filteredExams = exams.filter(ex => {
-    if (filterSubject !== 'all' && ex.subject !== filterSubject) return false;
-    if (filterBatch !== 'all') {
-      if (filterBatch === 'all_batches' && ex.batch_id) return false;
-      if (filterBatch !== 'all_batches' && ex.batch_id !== filterBatch) return false;
-    }
-    return true;
-  });
+  const filteredExams = filterSubject === 'all'
+    ? exams
+    : exams.filter(ex => ex.subject === filterSubject);
 
   return (
     <>
@@ -268,22 +263,6 @@ const InstitutionExams = () => {
                 </div>
 
                 <div>
-                  <label className="input-label" htmlFor="batchId">Target Batch / Section</label>
-                  <select
-                    id="batchId"
-                    className="text-input"
-                    value={batchId}
-                    onChange={(e) => setBatchId(e.target.value)}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">All Batches (Entire Institution)</option>
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name} ({b.student_count} students)</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
                   <label className="input-label" htmlFor="duration">Duration (Minutes)</label>
                   <select
                     id="duration"
@@ -314,18 +293,6 @@ const InstitutionExams = () => {
                     <option value="40">40 Questions</option>
                     <option value="60">60 Questions (KCET Standard)</option>
                   </select>
-                </div>
-
-                <div>
-                  <label className="input-label" htmlFor="marks">Max Marks</label>
-                  <input
-                    type="number"
-                    id="marks"
-                    className="text-input"
-                    value={totalMarks}
-                    onChange={(e) => setTotalMarks(e.target.value)}
-                    style={{ width: '100%' }}
-                  />
                 </div>
 
                 <div>
@@ -386,38 +353,10 @@ const InstitutionExams = () => {
               </div>
               <div>
                 <h2>Scheduled Weekly Exams ({exams.length})</h2>
-                <p className="section-sub">Active tests distributed across your institution's batches</p>
+                <p className="section-sub">Active tests distributed across your institution</p>
               </div>
             </div>
 
-            {/* Filters */}
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <select
-                className="text-input"
-                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
-                value={filterSubject}
-                onChange={(e) => setFilterSubject(e.target.value)}
-              >
-                <option value="all">All Subjects</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Biology">Biology</option>
-                <option value="Physics">Physics</option>
-                <option value="Chemistry">Chemistry</option>
-              </select>
-
-              <select
-                className="text-input"
-                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
-                value={filterBatch}
-                onChange={(e) => setFilterBatch(e.target.value)}
-              >
-                <option value="all">All Batches</option>
-                <option value="all_batches">Unassigned (Institution-wide)</option>
-                {batches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
           </div>
 
           <div className="section-body" style={{ padding: 0 }}>
@@ -435,7 +374,6 @@ const InstitutionExams = () => {
                     <tr>
                       <th>Exam Name</th>
                       <th>Subject</th>
-                      <th>Assigned Batch</th>
                       <th>Duration / Marks</th>
                       <th>Sets</th>
                       <th>Status</th>
@@ -464,17 +402,6 @@ const InstitutionExams = () => {
                             fontWeight: 500,
                           }}>
                             {exam.subject}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{
-                            fontSize: '0.8rem',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            background: exam.batch_id ? 'rgba(167, 139, 250, 0.1)' : 'rgba(255, 255, 255, 0.05)',
-                            color: exam.batch_id ? 'var(--purple-l)' : 'var(--muted)',
-                          }}>
-                            👥 {exam.batch_name || 'All Batches'}
                           </span>
                         </td>
                         <td style={{ fontSize: '0.85rem' }}>

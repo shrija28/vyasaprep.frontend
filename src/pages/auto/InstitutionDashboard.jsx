@@ -96,19 +96,6 @@ const InstitutionDashboard = () => {
             </div>
           </Link>
 
-          <Link to="/institution/students" style={{ textDecoration: 'none' }}>
-            <div className="kpi-tile" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', transition: 'transform 0.2s', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--muted)', fontWeight: 600 }}>ACTIVE BATCHES</span>
-                <span style={{ fontSize: '1.4rem' }}>🏫</span>
-              </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 700, color: 'var(--purple-l, #a78bfa)' }}>
-                {loading ? '—' : batches.length}
-              </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--purple-l, #a78bfa)' }}>View & Create Sections →</span>
-            </div>
-          </Link>
-
           <Link to="/institution/exams" style={{ textDecoration: 'none' }}>
             <div className="kpi-tile" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', transition: 'transform 0.2s', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -119,19 +106,6 @@ const InstitutionDashboard = () => {
                 {loading ? '—' : exams.length}
               </div>
               <span style={{ fontSize: '0.8rem', color: 'var(--blue)' }}>Build & Schedule Tests →</span>
-            </div>
-          </Link>
-
-          <Link to="/institution/subscription" style={{ textDecoration: 'none' }}>
-            <div className="kpi-tile" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', transition: 'transform 0.2s', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--muted)', fontWeight: 600 }}>SUBSCRIPTION</span>
-                <span style={{ fontSize: '1.4rem' }}>✓</span>
-              </div>
-              <div style={{ fontSize: '2.2rem', fontWeight: 700, color: '#10b981', textTransform: 'capitalize' }}>
-                {subStatus}
-              </div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Manage Plan & Quota →</span>
             </div>
           </Link>
         </section>

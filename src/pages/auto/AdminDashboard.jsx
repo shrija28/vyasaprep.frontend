@@ -11,21 +11,69 @@ const AdminDashboard = () => {
   const [data, setData] = useState(null);
 
   useEffect(() => {
-    // Simulate API fetch for Admin Dashboard Data
-    setTimeout(() => {
-      setData({
-        kpis: {
-          institutions: 42,
-          institutionsSub: '+3 this month',
-          students: 1250,
-          studentsSub: '+150 this week',
-          questions: 4500,
-          questionsSub: '+300 recent',
-          exams: 120,
-          examsSub: 'Active sessions: 15'
+    const fetchAdminDashboardData = async () => {
+      try {
+        const [dashRes, countsRes, instRes, stuRes] = await Promise.allSettled([
+          fetch('/api/admin/dashboard', { credentials: 'include' }),
+          fetch('/api/admin/questions/counts', { credentials: 'include' }),
+          fetch('/api/admin/institutions', { credentials: 'include' }),
+          fetch('/api/admin/students', { credentials: 'include' })
+        ]);
+
+        let totalInst = 0;
+        let totalStudents = 0;
+        let totalQuestions = 0;
+        let totalExams = 0;
+
+        if (dashRes.status === 'fulfilled' && dashRes.value.ok) {
+          const dashData = await dashRes.value.json();
+          if (dashData.kpis) {
+            setData(dashData);
+            return;
+          }
+          totalInst = dashData.total_institutions || dashData.institutions_count || 0;
+          totalStudents = dashData.total_students || dashData.students_count || 0;
+          totalQuestions = dashData.total_questions || dashData.questions_count || 0;
+          totalExams = dashData.total_exams || dashData.exams_count || 0;
         }
-      });
-    }, 800);
+
+        if (instRes.status === 'fulfilled' && instRes.value.ok) {
+          const instData = await instRes.value.json();
+          const instList = instData.institutions || (Array.isArray(instData) ? instData : []);
+          if (instList.length > 0) totalInst = instList.length;
+        }
+
+        if (stuRes.status === 'fulfilled' && stuRes.value.ok) {
+          const stuData = await stuRes.value.json();
+          const stuList = stuData.students || (Array.isArray(stuData) ? stuData : []);
+          if (stuList.length > 0) totalStudents = stuList.length;
+        }
+
+        if (countsRes.status === 'fulfilled' && countsRes.value.ok) {
+          const countsData = await countsRes.value.json();
+          if (countsData.counts) {
+            totalQuestions = Object.values(countsData.counts).reduce((a, b) => a + Number(b || 0), 0);
+          }
+        }
+
+        setData({
+          kpis: {
+            institutions: totalInst || 0,
+            institutionsSub: 'Registered institutions',
+            students: totalStudents || 0,
+            studentsSub: 'Enrolled students',
+            questions: totalQuestions || 0,
+            questionsSub: 'Question bank total',
+            exams: totalExams || 0,
+            examsSub: 'Published exams'
+          }
+        });
+      } catch (err) {
+        console.error('Failed to fetch admin dashboard:', err);
+      }
+    };
+
+    fetchAdminDashboardData();
   }, []);
 
   const chartOptions = {
@@ -211,10 +259,6 @@ const AdminDashboard = () => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         Create Exam
       </Link>
-      <Link to="/admin/subscriptions" className="qa-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Manage Subscriptions
-      </Link>
       <Link to="/admin/syllabus" className="qa-btn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
         Add KCET Topic
@@ -270,13 +314,6 @@ const AdminDashboard = () => {
         <div className="kpi-val" id="kpiAttempts">—</div>
         <div className="kpi-lbl">Exam Attempts</div>
         <div className="kpi-sub" id="kpiAttemptsSub">—</div>
-        <span className="kpi-arrow">→</span>
-      </Link>
-      <Link to="/admin/subscriptions" className="kpi-card">
-        <div className="kpi-accent" style={{"background":"linear-gradient(90deg,#059669,#16a34a)"}}></div>
-        <div className="kpi-val" id="kpiActiveSubs">—</div>
-        <div className="kpi-lbl">Active Subscriptions</div>
-        <div className="kpi-sub" id="kpiActiveSubsSub">—</div>
         <span className="kpi-arrow">→</span>
       </Link>
     </div>
@@ -372,36 +409,6 @@ const AdminDashboard = () => {
           </table>
         </div>
       </div>
-
-      <div className="section-card">
-        <div className="section-card-header">
-          <div className="section-nav">
-            <div><h3 style={{"margin":"0","fontSize":"1rem"}}>Subscription Overview</h3></div>
-            <Link to="/admin/subscriptions" className="view-all-link">Manage →</Link>
-          </div>
-        </div>
-        <div className="section-body">
-          <div style={{"display":"grid","gridTemplateColumns":"1fr 1fr","gap":"10px"}}>
-            <Link to="/admin/subscriptions" className="sub-tile" style={{"background":"rgba(5,150,105,0.12)","border":"1px solid rgba(5,150,105,0.3)"}}>
-              <div style={{"fontSize":"1.6rem","fontWeight":"800","color":"var(--green-l)"}} id="tilActiveSubs">—</div>
-              <div style={{"fontSize":"0.75rem","color":"var(--muted)"}}>Active</div>
-            </Link>
-            <Link to="/admin/subscriptions" className="sub-tile" style={{"background":"rgba(220,38,38,0.1)","border":"1px solid rgba(220,38,38,0.25)"}}>
-              <div style={{"fontSize":"1.6rem","fontWeight":"800","color":"var(--red-l)"}} id="tilExpiredSubs">—</div>
-              <div style={{"fontSize":"0.75rem","color":"var(--muted)"}}>Expired</div>
-            </Link>
-            <Link to="/admin/subscriptions" className="sub-tile" style={{"background":"rgba(217,119,6,0.12)","border":"1px solid rgba(217,119,6,0.3)"}}>
-              <div style={{"fontSize":"1.6rem","fontWeight":"800","color":"var(--yellow-l)"}} id="tilOverdueSubs">—</div>
-              <div style={{"fontSize":"0.75rem","color":"var(--muted)"}}>Overdue</div>
-            </Link>
-            <Link to="/admin/subscriptions" className="sub-tile" style={{"background":"rgba(37,99,235,0.1)","border":"1px solid rgba(37,99,235,0.25)"}}>
-              <div style={{"fontSize":"1.6rem","fontWeight":"800","color":"#60a5fa"}} id="tilNoSubs">—</div>
-              <div style={{"fontSize":"0.75rem","color":"var(--muted)"}}>No Subscription</div>
-            </Link>
-          </div>
-        </div>
-      </div>
-
     </div>
 
     
@@ -421,7 +428,7 @@ const AdminDashboard = () => {
               <th>Name</th>
               <th>KCET ID</th>
               <th>Email</th>
-              <th>Subscription Status</th>
+              <th>Status</th>
               <th>Joined</th>
             </tr>
           </thead>

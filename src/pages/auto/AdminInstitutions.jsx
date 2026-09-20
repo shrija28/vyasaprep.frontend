@@ -58,13 +58,13 @@ const AdminInstitutions = () => {
         <div className="table-scroll">
           <table className="results-table inst-table">
             <colgroup>
-              <col className="col-name"/><col className="col-status"/><col className="col-sub"/>
+              <col className="col-name"/><col className="col-status"/>
               <col className="col-stud"/><col className="col-quest"/><col className="col-exams"/>
               <col className="col-renew"/><col className="col-acts"/>
             </colgroup>
             <thead>
               <tr>
-                <th>Institution</th><th>Status</th><th>Subscription</th>
+                <th>Institution</th><th>Status</th>
                 <th>Students</th><th>Questions</th><th>Exams</th>
                 <th>Renewal</th><th>Actions</th>
               </tr>

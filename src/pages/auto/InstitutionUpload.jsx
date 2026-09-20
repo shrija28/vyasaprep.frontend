@@ -169,20 +169,11 @@ const InstitutionUpload = () => {
         formData.append('files', f);
       });
 
-      let res = await fetch('/api/institution/content/upload', {
+      const res = await fetch('/api/institution/content/upload', {
         method: 'POST',
         credentials: 'include',
         body: formData,
       });
-
-      if (res.status === 401 || res.status === 403) {
-        // Fallback to admin upload route if test user or session role
-        res = await fetch('/api/admin/upload', {
-          method: 'POST',
-          credentials: 'include',
-          body: formData,
-        });
-      }
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -525,7 +516,7 @@ const InstitutionUpload = () => {
             </div>
             <div>
               <h2>Question Bank Status</h2>
-              <p className="section-sub">Questions in your institution's bank (need 80 per subject to create an exam)</p>
+              <p className="section-sub">Questions in your institution's private bank</p>
             </div>
           </div>
           <div className="section-body">
@@ -539,9 +530,6 @@ const InstitutionUpload = () => {
             >
               {SUBJECTS.map((subj) => {
                 const count = (questionCounts && questionCounts.counts && questionCounts.counts[subj]) || 0;
-                const threshold = (questionCounts && questionCounts.threshold) || 80;
-                const pct = Math.min(100, Math.round((count / threshold) * 100));
-                const ready = count >= threshold;
 
                 return (
                   <div
@@ -566,11 +554,11 @@ const InstitutionUpload = () => {
                           fontWeight: 700,
                           padding: '2px 8px',
                           borderRadius: '10px',
-                          background: ready ? 'rgba(5,150,105,0.15)' : 'rgba(217,119,6,0.15)',
-                          color: ready ? 'var(--green-l)' : 'var(--yellow-l)'
+                          background: count > 0 ? 'rgba(5,150,105,0.15)' : 'rgba(217,119,6,0.15)',
+                          color: count > 0 ? 'var(--green-l)' : 'var(--yellow-l)'
                         }}
                       >
-                        {ready ? 'Ready' : `${count}/${threshold}`}
+                        {count} {count === 1 ? 'Question' : 'Questions'}
                       </span>
                     </div>
 
@@ -578,8 +566,8 @@ const InstitutionUpload = () => {
                       <div
                         style={{
                           height: '100%',
-                          width: `${pct}%`,
-                          background: ready ? 'var(--green-l)' : 'linear-gradient(90deg, var(--purple), var(--cyan-l))',
+                          width: count > 0 ? '100%' : '0%',
+                          background: count > 0 ? 'var(--green-l)' : 'var(--border)',
                           borderRadius: '3px',
                           transition: 'width 0.3s ease'
                         }}
@@ -587,7 +575,7 @@ const InstitutionUpload = () => {
                     </div>
 
                     <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '8px' }}>
-                      {count} questions indexed {ready ? '✓' : `(needs ${threshold - count} more)`}
+                      {count} {count === 1 ? 'question' : 'questions'} indexed
                     </div>
                   </div>
                 );
@@ -596,45 +584,6 @@ const InstitutionUpload = () => {
           </div>
         </div>
 
-        {/* How It Works Card */}
-        <div className="section-card" style={{ marginTop: '24px' }}>
-          <div className="section-card-header">
-            <div
-              className="section-icon"
-              style={{ background: 'linear-gradient(135deg,rgba(8,145,178,0.2),rgba(5,150,105,0.2))' }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-            </div>
-            <div>
-              <h2>How It Works</h2>
-              <p className="section-sub">Build your institution's private question bank</p>
-            </div>
-          </div>
-          <div className="section-body">
-            <ol style={{ margin: '0', paddingLeft: '20px', color: 'var(--muted2)', lineHeight: '1.9' }}>
-              <li><strong>Upload question papers</strong> — PDF, DOCX, or TXT files containing MCQs</li>
-              <li><strong>AI extracts questions</strong> — Our system parses and extracts individual MCQs automatically</li>
-              <li><strong>Questions are scoped to your institution</strong> — Only your students can access them</li>
-              <li><strong>Create exams</strong> — Go to the Exams tab to generate exam sets from your question bank</li>
-            </ol>
-            <div
-              style={{
-                marginTop: '16px',
-                padding: '12px',
-                background: 'rgba(217,119,6,0.1)',
-                border: '1px solid rgba(217,119,6,0.3)',
-                borderRadius: 'var(--rs)',
-              }}
-            >
-              <strong style={{ color: 'var(--yellow-l)' }}>Note:</strong>
-              <span style={{ color: 'var(--muted2)' }}> You need at least 80 questions per subject to create an exam (4 sets × 20 questions).</span>
-            </div>
-          </div>
-        </div>
       </main>
     </>
   );

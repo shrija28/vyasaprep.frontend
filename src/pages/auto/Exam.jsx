@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
 
 // High-precision face & liveness analyzer that verifies an actual human face is present
 // and strictly rejects covered cameras, black frames, blank walls, and Windows "Camera Off" placeholders.
@@ -541,7 +542,8 @@ const Exam = () => {
         if (data.authenticated) {
           setStudentDetails({
             name: data.display_name || data.sub || 'Student',
-            id: data.kcet_student_id || data.sub || 'STD-001'
+            id: generateStudentId(data),
+            institutionName: data.institution_name || data.institution_code || (data.student_subtype === 'institutional' ? (data.join_code || 'Institution Member') : null)
           });
         } else {
           setStudentDetails({ name: 'Guest Student', id: 'GST-001' });
@@ -719,18 +721,72 @@ const Exam = () => {
     setLoadingPublished(true);
     setPublishedError('');
     try {
-      const res = await fetch('/api/student/exams', { credentials: 'include' });
-      const data = await res.json();
-      if (res.ok && data.subjects) {
-        setPublishedSubjects(data.subjects);
+      let data = null;
+
+      // 1. Try primary student exams endpoint
+      let res = await fetch('/api/student/exams', { credentials: 'include' });
+      if (res.ok) {
+        data = await res.json().catch(() => null);
+      }
+
+      // 2. Fallbacks if primary endpoint is not available or non-200
+      if (!data) {
+        res = await fetch('/api/student/institution/exams', { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      }
+
+      if (!data) {
+        res = await fetch('/api/institution/content/exams', { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      }
+
+      if (data) {
+        let rawSubjects = [];
+        if (Array.isArray(data.subjects)) {
+          rawSubjects = data.subjects;
+        } else {
+          let rawExams = [];
+          if (Array.isArray(data.exams)) rawExams = data.exams;
+          else if (Array.isArray(data)) rawExams = data;
+          else if (data && Array.isArray(data.data)) rawExams = data.data;
+
+          const groupsMap = {};
+          rawExams.forEach((ex) => {
+            const subj = ex.subject || 'General';
+            if (!groupsMap[subj]) {
+              groupsMap[subj] = { subject: subj, exams: [], available_exams: 0 };
+            }
+            groupsMap[subj].exams.push(ex);
+            groupsMap[subj].available_exams += 1;
+          });
+          rawSubjects = Object.values(groupsMap);
+        }
+
+        const scopedSubjects = rawSubjects
+          .map((group) => {
+            const filteredExams = (group.exams || []).filter((ex) => ex.is_published !== false);
+            return {
+              ...group,
+              exams: filteredExams,
+              available_exams: filteredExams.length,
+            };
+          })
+          .filter((group) => group.exams.length > 0);
+
+        setPublishedSubjects(scopedSubjects);
         if (data.remaining_attempts) {
           setRemainingAttempts(data.remaining_attempts);
         }
       } else {
-        setPublishedError(data.message || 'Could not load published exams.');
+        setPublishedSubjects([]);
       }
     } catch (err) {
-      setPublishedError('Network error while retrieving published exams.');
+      console.error('Failed to retrieve published exams:', err);
+      setPublishedSubjects([]);
     } finally {
       setLoadingPublished(false);
     }
@@ -1346,7 +1402,7 @@ const Exam = () => {
           {!loadingPublished && filteredExamsList.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
               {filteredExamsList.map(({ exam, subjGroup }) => {
-                const defaultSet = exam.sets && exam.sets.length > 0 ? exam.sets[0] : null;
+                const defaultSet = getAssignedSetForStudent(exam.sets, studentDetails.id);
                 const subjectName = subjGroup.subject || 'General';
 
                 const badgeColor = subjectName === 'Biology'
@@ -1480,6 +1536,11 @@ const Exam = () => {
         <div className="exam-topbar-center">
           <span className="exam-badge set-badge" id="topbarSet">{examName}</span>
           <span className="exam-badge subject-badge" id="topbarSubject">{subject}</span>
+          {studentDetails.institutionName && (
+            <span className="exam-badge" style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399', fontSize: '0.78rem', fontWeight: 600 }}>
+              🏫 {studentDetails.institutionName}
+            </span>
+          )}
           {submitResult ? (
             <span style={{
               padding: '4px 12px',

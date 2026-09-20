@@ -256,58 +256,7 @@ const AdminStudentManage = () => {
       </div>
 
       
-      <div className="form-section">
-        <h3>Subscription Status</h3>
-        <div id="subscriptionInfo" style={{"display":"grid","gridTemplateColumns":"1fr 1fr 1fr","gap":"12px","marginBottom":"16px"}}>
-          <div className="info-tile">
-            <div className="info-tile-label">Current Status</div>
-            <div className="info-tile-value">
-              <span className="status-badge no_subscription" id="subStatus">No Subscription</span>
-            </div>
-          </div>
-          <div className="info-tile">
-            <div className="info-tile-label">Plan</div>
-            <div className="info-tile-value" id="subPlan">—</div>
-          </div>
-          <div className="info-tile">
-            <div className="info-tile-label">Renewal Date</div>
-            <div className="info-tile-value" id="subRenewal">—</div>
-          </div>
-        </div>
-      </div>
 
-      
-      <div className="form-section">
-        <h3>Manage Subscription</h3>
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="selectPlan">Change Plan</label>
-            <select id="selectPlan">
-              <option value="">Select a plan...</option>
-            </select>
-            <small>Choose a plan to update student subscription</small>
-          </div>
-          <div className="form-group">
-            <label htmlFor="selectDuration">Duration</label>
-            <select id="selectDuration">
-              <option value="1">1 Month</option>
-              <option value="3">3 Months</option>
-              <option value="6">6 Months</option>
-              <option value="12">1 Year</option>
-            </select>
-          </div>
-        </div>
-        <div className="form-row full">
-          <div className="form-group">
-            <label htmlFor="selectRenewFrom">Renewal From</label>
-            <input type="date" id="selectRenewFrom"/>
-            <small>Leave empty to renew from today</small>
-          </div>
-        </div>
-        <div style={{"marginTop":"12px","display":"flex","justifyContent":"flex-end"}}>
-          <button type="button" className="btn-outline small" id="btnRemoveSub" style={{"color":"var(--red-l)","borderColor":"var(--red-l)"}}>🚫 Remove Subscription (Set INACTIVE)</button>
-        </div>
-      </div>
 
       
       <div className="action-buttons">

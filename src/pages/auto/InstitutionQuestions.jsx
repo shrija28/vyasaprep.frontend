@@ -1,237 +1,430 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 const InstitutionQuestions = () => {
+  const [questions, setQuestions] = useState([]);
+  const [counts, setCounts] = useState({});
+  const [filterSubject, setFilterSubject] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(15);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [deleteId, setDeleteId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const fetchCounts = useCallback(async () => {
+    try {
+      let res = await fetch('/api/institution/content/questions/counts', { credentials: 'include' });
+      if (!res.ok) {
+        res = await fetch('/api/institution/questions/counts', { credentials: 'include' });
+      }
+      if (res.ok) {
+        const data = await res.json();
+        if (data.counts || data.counts_by_subject) {
+          setCounts(data.counts || data.counts_by_subject);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch institution question counts:', err);
+    }
+  }, []);
+
+  const fetchQuestions = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        page_size: String(pageSize),
+      });
+      if (filterSubject) params.append('subject', filterSubject);
+
+      let res = await fetch(`/api/institution/content/questions?${params.toString()}`, { credentials: 'include' });
+      if (!res.ok) {
+        res = await fetch(`/api/institution/questions?${params.toString()}`, { credentials: 'include' });
+      }
+      
+      if (res.ok) {
+        const data = await res.json();
+        let fetchedList = [];
+        
+        if (Array.isArray(data)) {
+          fetchedList = data;
+        } else if (data && typeof data === 'object') {
+          fetchedList = data.questions || data.items || data.mcqs || data.results || data.data || [];
+        }
+
+        setQuestions(fetchedList);
+        setTotalQuestions(data.total || data.total_questions || data.count || fetchedList.length || 0);
+
+        if (data.counts || data.counts_by_subject) {
+          setCounts(data.counts || data.counts_by_subject);
+        }
+      } else {
+        setQuestions([]);
+        setTotalQuestions(0);
+      }
+    } catch (err) {
+      console.error('Failed to fetch institution question bank:', err);
+      setError('Unable to load questions from database. Ensure the backend server is active.');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, pageSize, filterSubject]);
+
+  useEffect(() => {
+    fetchCounts();
+  }, [fetchCounts]);
+
+  useEffect(() => {
+    fetchQuestions();
+  }, [fetchQuestions]);
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      let res = await fetch(`/api/institution/content/questions/${deleteId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        res = await fetch(`/api/institution/questions/${deleteId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+      }
+
+      if (res.ok) {
+        setDeleteId(null);
+        fetchQuestions();
+        fetchCounts();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.message || 'Failed to delete question.');
+      }
+    } catch (err) {
+      alert('Error deleting question.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const totalPages = Math.ceil(totalQuestions / pageSize) || 1;
+  const subjects = ['Biology', 'Physics', 'Chemistry', 'Mathematics'];
+  const totalStored = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
+
   return (
     <>
-      {/* Auto-injected styles from HTML head */}
-      <style dangerouslySetInnerHTML={{ __html: `
-    /* ── Questions table — scoped overrides ──────────────────────────────
-       The global .results-table td has white-space:nowrap which collapses
-       long MCQ text. These scoped rules fix layout without touching other
-       tables in the app.
-    ───────────────────────────────────────────────────────────────────── */
-    #questionsTable {
-      table-layout: fixed;
-      width: 100%;
-    }
+      <div className="bg-mesh"></div>
 
-    /* Column widths: fixed so they never collapse regardless of content */
-    #questionsTable col.col-question  { width: 44%; }
-    #questionsTable col.col-subject   { width: 10%; }
-    #questionsTable col.col-topic     { width: 12%; }
-    #questionsTable col.col-options   { width: 28%; }
-    #questionsTable col.col-action    { width: 6%;  }
-
-    /* All cells in this table: allow wrapping */
-    #questionsTable td,
-    #questionsTable th {
-      white-space: normal;
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      vertical-align: top;
-    }
-
-    /* Question text */
-    .q-text {
-      font-size: 0.87rem;
-      line-height: 1.5;
-      font-weight: 500;
-      color: var(--text);
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      white-space: normal;
-    }
-
-    /* Options list inside the options cell */
-    .q-options {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-    .q-option {
-      font-size: 0.77rem;
-      line-height: 1.4;
-      color: var(--muted2);
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      white-space: normal;
-    }
-    .q-option.correct {
-      color: var(--green-l);
-      font-weight: 600;
-    }
-
-    /* Subject badge — keep it on one line but allow shrink */
-    #questionsTable .score-badge {
-      white-space: nowrap;
-      display: inline-block;
-    }
-
-    /* Topic cell */
-    .q-topic {
-      font-size: 0.8rem;
-      color: var(--muted);
-      word-break: break-word;
-      overflow-wrap: anywhere;
-      white-space: normal;
-    }
-
-    /* Mobile: collapse to card layout below 640px */
-    @media (max-width: 640px) {
-      #questionsTable,
-      #questionsTable thead,
-      #questionsTable tbody,
-      #questionsTable th,
-      #questionsTable td,
-      #questionsTable tr {
-        display: block;
-        width: 100%;
-      }
-      #questionsTable thead { display: none; }
-      #questionsTable tr {
-        margin-bottom: 12px;
-        border: 1px solid var(--border);
-        border-radius: var(--rs);
-        padding: 12px;
-        background: var(--card-bg);
-      }
-      #questionsTable td {
-        padding: 6px 0;
-        border: none;
-      }
-      #questionsTable td::before {
-        content: attr(data-label);
-        display: block;
-        font-size: 0.7rem;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        margin-bottom: 2px;
-      }
-    }
-  
-` }} />
-      
-  <div className="bg-mesh"></div>
-
-  
-  
-
-  <main className="main-wrap">
-
-    
-    <div className="section-card">
-      <div className="section-card-header">
-        <div className="section-icon" style={{"background":"linear-gradient(135deg,rgba(124,58,237,0.2),rgba(37,99,235,0.2))"}}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </div>
-        <div>
-          <h2>Institution Question Bank</h2>
-          <p className="section-sub">Questions extracted from your uploaded papers — scoped exclusively to your institution</p>
-        </div>
-        <div style={{"marginLeft":"auto"}}>
-          <Link to="/institution/upload" className="btn-primary" style={{"textDecoration":"none"}}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{"width":"14px","height":"14px"}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Upload More
-          </Link>
-        </div>
-      </div>
-      <div className="section-body">
-        
-        <div id="countTiles" style={{"display":"grid","gridTemplateColumns":"repeat(auto-fit,minmax(180px,1fr))","gap":"12px","marginBottom":"20px"}}>
-          <div style={{"textAlign":"center","color":"var(--muted)","padding":"24px"}}>Loading…</div>
-        </div>
-      </div>
-    </div>
-
-    
-    <div className="section-card">
-      <div className="section-card-header">
-        <div className="section-icon" style={{"background":"linear-gradient(135deg,rgba(8,145,178,0.2),rgba(5,150,105,0.2))"}}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-        </div>
-        <div>
-          <h2>All Questions</h2>
-          <p className="section-sub" id="questionSubtitle">Loading…</p>
-        </div>
-      </div>
-      <div className="section-body" style={{"paddingBottom":"0"}}>
-        
-        <div style={{"display":"flex","gap":"12px","alignItems":"center","flexWrap":"wrap","marginBottom":"16px"}}>
-          <div className="input-group" style={{"margin":"0"}}>
-            <label className="input-label" htmlFor="subjectFilter">Filter by subject</label>
-            <select id="subjectFilter" className="text-input" style={{"minWidth":"180px"}}>
-              <option value="">All Subjects</option>
-              <option value="Biology">Biology</option>
-              <option value="Physics">Physics</option>
-              <option value="Chemistry">Chemistry</option>
-              <option value="Mathematics">Mathematics</option>
-            </select>
+      <main className="main-wrap" style={{ padding: '24px' }}>
+        {/* Header section card */}
+        <div className="section-card" style={{ marginBottom: '20px' }}>
+          <div className="section-card-header" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div className="section-icon" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(37,99,235,0.2))' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+            </div>
+            <div>
+              <h2 style={{ margin: 0 }}>Institution Question Bank</h2>
+              <p className="section-sub" style={{ margin: '2px 0 0' }}>
+                View and manage all extracted MCQs fetched/stored in your institution's private question bank
+              </p>
+            </div>
+            <div style={{ marginLeft: 'auto' }}>
+              <Link to="/institution/upload" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                Upload &amp; Extract More
+              </Link>
+            </div>
           </div>
-          <div style={{"marginTop":"18px"}}>
-            <button className="btn-outline small" id="refreshBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{"width":"13px","height":"13px"}}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-              Refresh
-            </button>
+
+          {/* Counts overview tiles */}
+          <div className="section-body">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+              <div style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 'var(--rs)', padding: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--purple-l)' }}>{totalStored || totalQuestions}</div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>Total Questions</div>
+              </div>
+              {subjects.map((subj) => (
+                <div
+                  key={subj}
+                  onClick={() => {
+                    setFilterSubject(filterSubject === subj ? '' : subj);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    background: filterSubject === subj ? 'rgba(124, 58, 237, 0.12)' : 'var(--s2)',
+                    border: filterSubject === subj ? '1px solid var(--purple-l)' : '1px solid var(--border)',
+                    borderRadius: 'var(--rs)',
+                    padding: '14px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text)' }}>{counts[subj] || 0}</div>
+                  <div style={{ fontSize: '0.78rem', color: filterSubject === subj ? 'var(--purple-l)' : 'var(--muted)', fontWeight: 600, marginTop: '2px' }}>
+                    {subj}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="section-body" style={{"padding":"0"}}>
-        <div className="table-scroll">
-          <table className="results-table" id="questionsTable">
-            <colgroup>
-              <col className="col-question"/>
-              <col className="col-subject"/>
-              <col className="col-topic"/>
-              <col className="col-options"/>
-              <col className="col-action"/>
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Question</th>
-                <th>Subject</th>
-                <th>Topic</th>
-                <th>Options (✓ = correct)</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody id="questionsTableBody">
-              <tr><td colspan="5" style={{"textAlign":"center","color":"var(--muted)","padding":"40px"}}>Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
+        {/* Questions list table card */}
+        <div className="section-card">
+          <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>{filterSubject ? `${filterSubject} Questions` : 'All Fetched Questions'} ({totalQuestions})</h2>
+              <p className="section-sub" style={{ margin: '2px 0 0' }}>
+                Showing page {currentPage} of {totalPages}
+              </p>
+            </div>
 
-        
-        <div id="paginationBar" style={{"display":"flex","alignItems":"center","justifyContent":"space-between","padding":"14px 20px","borderTop":"1px solid var(--border)"}}>
-          <span id="paginationInfo" style={{"fontSize":"0.82rem","color":"var(--muted)"}}>—</span>
-          <div style={{"display":"flex","gap":"8px"}}>
-            <button className="btn-outline small" id="prevBtn" disabled>← Prev</button>
-            <button className="btn-outline small" id="nextBtn" disabled>Next →</button>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              <select
+                className="text-input"
+                value={filterSubject}
+                onChange={(e) => {
+                  setFilterSubject(e.target.value);
+                  setCurrentPage(1);
+                }}
+                style={{ minWidth: '160px', padding: '6px 12px', fontSize: '0.85rem' }}
+              >
+                <option value="">All Subjects</option>
+                <option value="Biology">Biology</option>
+                <option value="Physics">Physics</option>
+                <option value="Chemistry">Chemistry</option>
+                <option value="Mathematics">Mathematics</option>
+              </select>
+
+              <button
+                type="button"
+                className="btn-outline small"
+                onClick={fetchQuestions}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '13px', height: '13px' }}>
+                  <polyline points="23 4 23 10 17 10" />
+                  <path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="section-body" style={{ padding: 0 }}>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '50px', color: 'var(--muted)' }}>⏳ Loading fetched questions...</div>
+            ) : error ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--red-l)' }}>{error}</div>
+            ) : questions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
+                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📚</div>
+                <h3 style={{ margin: '0 0 8px 0', color: 'var(--text)' }}>
+                  {filterSubject ? `No ${filterSubject} Questions Fetched` : 'No Questions in Institution Bank'}
+                </h3>
+                <p style={{ margin: '0 0 20px 0', fontSize: '0.9rem', maxWidth: '480px', marginInline: 'auto' }}>
+                  Upload question papers or textbooks to automatically extract and populate MCQs in your institution question bank.
+                </p>
+                <Link to="/institution/upload" className="btn-primary" style={{ textDecoration: 'none' }}>
+                  Upload &amp; Extract MCQs →
+                </Link>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {questions.map((q, idx) => {
+                  const qIndex = (currentPage - 1) * pageSize + idx + 1;
+                  const qId = q.id || q.question_id || q._id || idx;
+                  const isExpanded = expandedId === qId;
+
+                  const questionText = q.question || q.question_text || q.stem || q.text || q.title || 'Question text unavailable';
+                  const subjectName = q.subject || q.subject_name || q.category || 'General';
+                  const topicName = q.topic || q.chapter || q.subtopic || '';
+
+                  // Extract options array/object safely
+                  const rawOpts = q.options || q.choices || q.answers || [];
+                  let optionsList = [];
+                  if (Array.isArray(rawOpts)) {
+                    optionsList = rawOpts.map((opt, i) => ({
+                      label: String.fromCharCode(65 + i),
+                      text: typeof opt === 'object' ? opt.text || opt.option || opt.choice || JSON.stringify(opt) : String(opt),
+                    }));
+                  } else if (rawOpts && typeof rawOpts === 'object') {
+                    optionsList = Object.entries(rawOpts).map(([key, val]) => ({
+                      label: key.toUpperCase(),
+                      text: String(val),
+                    }));
+                  }
+
+                  const correctStr = String(q.correct_option ?? q.answer ?? q.correct_answer ?? q.correct ?? '').toUpperCase();
+
+                  return (
+                    <div
+                      key={qId}
+                      style={{
+                        padding: '16px 20px',
+                        borderBottom: '1px solid var(--border)',
+                        background: isExpanded ? 'rgba(124, 58, 237, 0.03)' : 'transparent',
+                        transition: 'background 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 'bold', color: 'var(--purple-l)', fontSize: '0.9rem' }}>#{qIndex}</span>
+                            <span
+                              style={{
+                                fontSize: '0.75rem',
+                                padding: '2px 8px',
+                                borderRadius: '10px',
+                                background:
+                                  subjectName === 'Biology'
+                                    ? 'rgba(16, 185, 129, 0.15)'
+                                    : subjectName === 'Physics'
+                                    ? 'rgba(59, 130, 246, 0.15)'
+                                    : subjectName === 'Chemistry'
+                                    ? 'rgba(245, 158, 11, 0.15)'
+                                    : 'rgba(124, 58, 237, 0.15)',
+                                color:
+                                  subjectName === 'Biology'
+                                    ? '#10b981'
+                                    : subjectName === 'Physics'
+                                    ? '#3b82f6'
+                                    : subjectName === 'Chemistry'
+                                    ? '#f59e0b'
+                                    : '#a78bfa',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {subjectName}
+                            </span>
+                            {topicName && (
+                              <span style={{ fontSize: '0.75rem', color: 'var(--muted)', background: 'var(--s2)', border: '1px solid var(--border)', padding: '2px 8px', borderRadius: '10px' }}>
+                                {topicName}
+                              </span>
+                            )}
+                          </div>
+
+                          <p style={{ margin: 0, fontSize: '0.96rem', fontWeight: 500, color: 'var(--text)', lineHeight: 1.5 }}>
+                            {questionText}
+                          </p>
+
+                          {/* Options display */}
+                          {optionsList.length > 0 && (
+                            <div style={{ marginTop: '12px', display: isExpanded ? 'grid' : 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                              {optionsList.map((opt, oIdx) => {
+                                const isCorrect =
+                                  correctStr === opt.label ||
+                                  correctStr === String(oIdx) ||
+                                  correctStr === opt.text.toUpperCase();
+                                return (
+                                  <div
+                                    key={oIdx}
+                                    style={{
+                                      padding: '8px 12px',
+                                      borderRadius: 'var(--rs)',
+                                      border: isCorrect ? '1px solid #10b981' : '1px solid var(--border)',
+                                      background: isCorrect ? 'rgba(16, 185, 129, 0.1)' : 'var(--s2)',
+                                      fontSize: '0.85rem',
+                                      color: isCorrect ? '#10b981' : 'var(--text)',
+                                      fontWeight: isCorrect ? 600 : 400,
+                                    }}
+                                  >
+                                    <span style={{ fontWeight: 700, marginRight: '6px' }}>{opt.label}.</span>
+                                    {opt.text} {isCorrect && ' ✓'}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn-outline small"
+                            onClick={() => setExpandedId(isExpanded ? null : qId)}
+                            style={{ fontSize: '0.78rem' }}
+                          >
+                            {isExpanded ? 'Hide Options' : 'View Options'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-outline small"
+                            onClick={() => setDeleteId(qId)}
+                            style={{ fontSize: '0.78rem', color: 'var(--red-l)', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Pagination footer */}
+            {totalQuestions > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                  Showing {Math.min((currentPage - 1) * pageSize + 1, totalQuestions)}–{Math.min(currentPage * pageSize, totalQuestions)} of {totalQuestions} questions
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-outline small"
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-outline small"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
-    </div>
+      </main>
 
-  </main>
-
-  
-  <div id="deleteModal" style={{"display":"none","position":"fixed","inset":"0","background":"rgba(0,0,0,0.6)","zIndex":"1000","alignItems":"center","justifyContent":"center"}}>
-    <div style={{"background":"var(--card-bg)","border":"1px solid var(--border)","borderRadius":"var(--r)","padding":"28px","maxWidth":"420px","width":"90%"}}>
-      <h3 style={{"margin":"0 0 12px","fontSize":"1.1rem"}}>Delete Question?</h3>
-      <p style={{"color":"var(--muted)","fontSize":"0.9rem","margin":"0 0 20px"}}>This will permanently remove the question from your bank. This cannot be undone.</p>
-      <div style={{"display":"flex","gap":"10px","justifyContent":"flex-end"}}>
-        <button className="btn-outline small" id="deleteCancelBtn">Cancel</button>
-        <button className="btn-primary small" id="deleteConfirmBtn" style={{"background":"var(--red)","borderColor":"var(--red)"}}>Delete</button>
-      </div>
-    </div>
-  </div>
-
-  
-  
-  
-
+      {/* Delete confirmation modal */}
+      {deleteId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 'var(--r)', padding: '28px', maxWidth: '420px', width: '90%' }}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '1.1rem' }}>Delete Question?</h3>
+            <p style={{ color: 'var(--muted)', fontSize: '0.9rem', margin: '0 0 20px' }}>
+              This will permanently remove the question from your question bank. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-outline small" onClick={() => setDeleteId(null)} disabled={deleting}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary small" onClick={handleDelete} disabled={deleting} style={{ background: 'var(--red)', borderColor: 'var(--red)' }}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

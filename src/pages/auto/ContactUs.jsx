@@ -389,8 +389,6 @@ const ContactUs = () => {
           <label htmlFor="contactSubject">Subject *</label>
           <select id="contactSubject" name="subject" required>
             <option value="">Select a subject...</option>
-            <option value="subscription">Subscription Issue</option>
-            <option value="payment">Payment Issue</option>
             <option value="technical">Technical Issue</option>
             <option value="exam">Exam Problem</option>
             <option value="account">Account Help</option>
@@ -422,42 +420,6 @@ const ContactUs = () => {
         <div className="faq-answer">
           <div className="faq-answer-text">
             To reset your password, click on the "Forgot Password" link on the login page. Enter your email address and follow the instructions sent to your inbox. You'll receive a password reset link valid for 24 hours.
-          </div>
-        </div>
-      </div>
-
-      <div className="faq-item" >
-        <div className="faq-question">
-          <span>Can I cancel my subscription?</span>
-          <span className="faq-toggle">▼</span>
-        </div>
-        <div className="faq-answer">
-          <div className="faq-answer-text">
-            Yes, you can cancel your subscription anytime from the Subscription page. Your access will continue until the end of your current billing period. No refunds are provided for partial months.
-          </div>
-        </div>
-      </div>
-
-      <div className="faq-item" >
-        <div className="faq-question">
-          <span>What payment methods do you accept?</span>
-          <span className="faq-toggle">▼</span>
-        </div>
-        <div className="faq-answer">
-          <div className="faq-answer-text">
-            We accept all major credit/debit cards (Visa, Mastercard, American Express), UPI, net banking, and digital wallets through Razorpay. All payments are secure and encrypted.
-          </div>
-        </div>
-      </div>
-
-      <div className="faq-item" >
-        <div className="faq-question">
-          <span>How many exams can I take with a subscription?</span>
-          <span className="faq-toggle">▼</span>
-        </div>
-        <div className="faq-answer">
-          <div className="faq-answer-text">
-            The number of exams depends on your subscription plan. Check your plan details on the Subscription page to see your exam limits. Most plans include unlimited practice exams.
           </div>
         </div>
       </div>

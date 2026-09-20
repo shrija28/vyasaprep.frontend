@@ -25,11 +25,6 @@ const AdminDashboard = () => {
           <div style={{ fontSize: '0.8rem', color: 'var(--green-l)', marginTop: '4px' }}>+2 this week</div>
         </div>
         <div className="section-card" style={{ padding: '20px' }}>
-          <h3 style={{ fontSize: '0.85rem', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Active Subscriptions</h3>
-          <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--blue-l)' }}>3,892</div>
-          <div style={{ fontSize: '0.8rem', color: 'var(--green-l)', marginTop: '4px' }}>+45 this week</div>
-        </div>
-        <div className="section-card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '0.85rem', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Questions Gen.</h3>
           <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--yellow-l)' }}>1.2M</div>
           <div style={{ fontSize: '0.8rem', color: 'var(--green-l)', marginTop: '4px' }}>+12k today</div>
