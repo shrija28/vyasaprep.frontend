@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 
 const InstitutionDashboard = () => {
@@ -7,9 +7,10 @@ const InstitutionDashboard = () => {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState('');
 
-  const fetchDashboard = async () => {
-    setLoading(true);
+  const fetchDashboard = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     setError('');
     try {
       // 1. Dashboard summary
@@ -32,18 +33,21 @@ const InstitutionDashboard = () => {
         const eData = await examRes.json();
         setExams(eData.exams || []);
       }
-    } catch (err) {
-      setError('Unable to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    fetchDashboard();
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    } catch (err) {
+      if (!isSilent) setError('Unable to load dashboard data');
+    } finally {
+      if (!isSilent) setLoading(false);
+    }
   }, []);
 
-  const totalStudents = dashboardData?.total_students ?? 0;
+  useEffect(() => {
+    fetchDashboard(false);
+  }, [fetchDashboard]);
+
+  const batchStudentsSum = batches.reduce((sum, b) => sum + (b.student_count ?? b.students_count ?? (Array.isArray(b.students) ? b.students.length : 0)), 0);
+  const totalStudents = dashboardData?.total_students ?? dashboardData?.students_count ?? (batchStudentsSum > 0 ? batchStudentsSum : (dashboardData?.students?.length ?? 0));
   const institutionName = dashboardData?.institution_name || 'Your Institution';
   const subStatus = dashboardData?.subscription_status || 'active';
 

@@ -1,128 +1,156 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 const InvitationAccept = () => {
+  const [searchParams] = useSearchParams();
+  const inviteCode = searchParams.get('code') || searchParams.get('token') || '';
+  
+  const [loading, setLoading] = useState(true);
+  const [invitationData, setInvitationData] = useState(null);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const verifyInvite = async () => {
+      setLoading(true);
+      setError('');
+      if (!inviteCode) {
+        setError('No invitation code provided in the link.');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/institution/invitations/info?code=${encodeURIComponent(inviteCode)}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setInvitationData(data);
+        } else {
+          // Fallback info if verification endpoint is simple or token is embedded
+          setInvitationData({
+            institution_name: 'Partner Institution',
+            invite_code: inviteCode
+          });
+        }
+      } catch {
+        setInvitationData({
+          institution_name: 'Partner Institution',
+          invite_code: inviteCode
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifyInvite();
+  }, [inviteCode]);
+
+  const handleAccept = async () => {
+    setSubmitting(true);
+    setError('');
+    try {
+      const res = await fetch('/api/institution/invitations/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code: inviteCode, invite_code: inviteCode })
+      });
+
+      if (res.ok) {
+        setSuccess(true);
+        setTimeout(() => {
+          navigate('/student/institution');
+        }, 1500);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || 'Failed to accept invitation. You may need to sign in first.');
+      }
+    } catch {
+      setError('Network error while processing invitation.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <>
-      {/* Auto-injected styles from HTML head */}
-      <style dangerouslySetInnerHTML={{ __html: `` }} />
-      
-  <div className="bg-mesh"></div>
+      <div className="bg-mesh"></div>
 
-  
-  
+      <main style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 60px)', padding: '20px' }}>
+        <section className="section-card" style={{ maxWidth: '520px', width: '100%', padding: '32px' }}>
+          <h1 id="invitationTitle" style={{ marginBottom: '8px' }}>Institution Invitation</h1>
+          <p className="input-label" style={{ marginBottom: '24px', textTransform: 'none', fontSize: '0.9rem' }}>
+            Review the invitation details below and choose to accept or decline.
+          </p>
 
-  
-  <main style={{"display":"flex","alignItems":"center","justifyContent":"center","minHeight":"calc(100vh - 60px)","padding":"20px"}}>
-    <section className="section-card" style={{"maxWidth":"520px","width":"100%","padding":"32px"}} aria-labelledby="invitationTitle">
-      <h1 id="invitationTitle" style={{"marginBottom":"8px"}}>Institution Invitation</h1>
-      <p className="input-label" style={{"marginBottom":"24px","textTransform":"none","fontSize":"0.9rem"}}>
-        Review the invitation details below and choose to accept or decline.
-      </p>
+          {error && (
+            <div style={{ background: 'rgba(220,38,38,0.1)', border: '1px solid var(--red)', borderRadius: 'var(--rs)', padding: '10px 14px', marginBottom: '16px', fontSize: '0.85rem', color: 'var(--red-l)' }}>
+              {error}
+            </div>
+          )}
 
-      
-      <div
-        id="invitationError"
-        role="alert"
-        aria-live="polite"
-        style={{"display":"none","background":"rgba(220,38,38,0.1)","border":"1px solid var(--red)","borderRadius":"var(--rs)","padding":"10px 14px","marginBottom":"16px","fontSize":"0.85rem","color":"var(--red-l)"}}
-      ></div>
+          {success && (
+            <div style={{ background: 'rgba(5,150,105,0.1)', border: '1px solid var(--green)', borderRadius: 'var(--rs)', padding: '10px 14px', marginBottom: '16px', fontSize: '0.85rem', color: 'var(--green-l)' }}>
+              Invitation accepted successfully! Redirecting to institution portal…
+            </div>
+          )}
 
-      
-      <div
-        id="invitationLoading"
-        role="status"
-        aria-live="polite"
-        style={{"textAlign":"center","padding":"24px 0","color":"var(--muted)","fontSize":"0.9rem"}}
-      >
-        Loading invitation details…
-      </div>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--muted)', fontSize: '0.9rem' }}>
+              Loading invitation details…
+            </div>
+          ) : (
+            <section id="invitationDetails">
+              <div className="input-group" style={{ marginBottom: '16px' }}>
+                <span className="input-label">Institution</span>
+                <p style={{ fontSize: '1.1rem', fontWeight: '600', color: 'var(--text)', margin: '0' }}>
+                  {invitationData?.institution_name || 'VyasaPrep Institution'}
+                </p>
+              </div>
 
-      
-      <section
-        id="invitationDetails"
-        style={{"display":"none"}}
-        aria-labelledby="invitationDetailsHeading"
-      >
-        <h2 id="invitationDetailsHeading" className="visually-hidden">
-          Invitation Details
-        </h2>
+              {inviteCode && (
+                <div className="input-group" style={{ marginBottom: '16px' }}>
+                  <span className="input-label">Invite Code</span>
+                  <p style={{ fontSize: '0.95rem', color: 'var(--purple-l)', fontWeight: 600, margin: '0' }}>
+                    {inviteCode}
+                  </p>
+                </div>
+              )}
 
-        
-        <div className="input-group" style={{"marginBottom":"16px"}}>
-          <span className="input-label" id="institutionNameLabel">Institution</span>
-          <p
-            id="institutionName"
-            aria-labelledby="institutionNameLabel"
-            style={{"fontSize":"1.1rem","fontWeight":"600","color":"var(--text)","margin":"0"}}
-          >—</p>
-        </div>
+              <div className="input-group" style={{ marginBottom: '24px' }}>
+                <span className="input-label">What You'll Get</span>
+                <ul style={{ margin: '8px 0 0', paddingLeft: '20px', color: 'var(--text)', fontSize: '0.9rem', lineHeight: '1.6' }}>
+                  <li>Access to your institution's curated exams</li>
+                  <li>Personalized analytics and batch rankings</li>
+                  <li>Full access to your institution's prep portal</li>
+                </ul>
+              </div>
 
-        
-        <div className="input-group" style={{"marginBottom":"16px"}}>
-          <span className="input-label" id="invitationExpiryLabel">Invitation Expires</span>
-          <p
-            id="invitationExpiry"
-            aria-labelledby="invitationExpiryLabel"
-            style={{"fontSize":"0.95rem","color":"var(--text)","margin":"0"}}
-          >—</p>
-        </div>
-
-        
-        <div className="input-group" style={{"marginBottom":"24px"}}>
-          <span className="input-label" id="invitationBenefitsLabel">What You'll Get</span>
-          <ul
-            id="invitationBenefits"
-            aria-labelledby="invitationBenefitsLabel"
-            style={{"margin":"8px 0 0","paddingLeft":"20px","color":"var(--text)","fontSize":"0.9rem","lineHeight":"1.6"}}
-          >
-            <li>Access to your institution's curated exams</li>
-            <li>Personalized analytics and progress tracking</li>
-            <li>Full access to your institution's prep portal</li>
-          </ul>
-        </div>
-
-        
-        <div style={{"display":"flex","gap":"12px","flexWrap":"wrap"}}>
-          <button
-            type="button"
-            id="acceptBtn"
-            className="btn-primary"
-            aria-describedby="invitationBenefitsLabel"
-            style={{"flex":"1","minWidth":"140px","justifyContent":"center"}}
-          >
-            Accept Invitation
-          </button>
-          <button
-            type="button"
-            id="declineBtn"
-            className="btn-outline"
-            style={{"flex":"1","minWidth":"140px","justifyContent":"center"}}
-          >
-            Decline
-          </button>
-        </div>
-      </section>
-
-      
-      <div id="invitationRetry" style={{"display":"none","textAlign":"center","marginTop":"16px"}}>
-        <button type="button" id="retryBtn" className="btn-secondary" aria-label="Retry loading invitation details" style={{"justifyContent":"center"}}>
-          Retry
-        </button>
-      </div>
-    </section>
-  </main>
-
-  
-  
-  
-  
-  
-  
-  
-  
-  
-
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleAccept}
+                  disabled={submitting || success}
+                  style={{ flex: '1', minWidth: '140px', justifyContent: 'center' }}
+                >
+                  {submitting ? 'Accepting…' : 'Accept Invitation'}
+                </button>
+                <Link
+                  to="/"
+                  className="btn-outline"
+                  style={{ flex: '1', minWidth: '140px', justifyContent: 'center', textAlign: 'center', textDecoration: 'none' }}
+                >
+                  Decline
+                </Link>
+              </div>
+            </section>
+          )}
+        </section>
+      </main>
     </>
   );
 };

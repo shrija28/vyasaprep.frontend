@@ -1241,37 +1241,6 @@ const Exam = () => {
                 Please choose which published test you want to answer to begin your exam
               </p>
             </div>
-
-            {remainingAttempts && (
-              <div style={{
-                background: 'var(--s1)',
-                border: '1px solid var(--border2)',
-                borderRadius: '14px',
-                padding: '12px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                boxShadow: 'var(--shadow)'
-              }}>
-                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>
-                  🎯
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--muted)', letterSpacing: '0.5px' }}>
-                    Exam Attempts
-                  </div>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text)' }}>
-                    {remainingAttempts.is_unlimited ? (
-                      <span style={{ color: 'var(--green)' }}>Unlimited Practice</span>
-                    ) : (
-                      <span>
-                        <strong style={{ color: 'var(--purple-l)' }}>{remainingAttempts.remaining_attempts ?? remainingAttempts.max_attempts}</strong> / {remainingAttempts.max_attempts} Left
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Filter & Search Bar */}

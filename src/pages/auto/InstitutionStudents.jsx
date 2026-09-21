@@ -182,6 +182,7 @@ const InstitutionStudents = () => {
     }
   };
 
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const filteredStudents = students;
 
   return (
@@ -195,7 +196,7 @@ const InstitutionStudents = () => {
               Manage <span className="institution-page-title-accent">Students</span>
             </h1>
             <p className="institution-page-sub">
-              Onboard and manage your institution students
+              Onboard, organize into batches, and view details for all institution students
             </p>
           </div>
           <div className="institution-page-actions" style={{ display: 'flex', gap: '12px' }}>
@@ -235,7 +236,7 @@ const InstitutionStudents = () => {
               </div>
               <div>
                 <h2>Enrolled Students ({students.length})</h2>
-                <p className="section-sub">View all registered institution students</p>
+                <p className="section-sub">View all registered institution students and their profile details</p>
               </div>
             </div>
           </div>
@@ -254,32 +255,61 @@ const InstitutionStudents = () => {
                     <tr>
                       <th>Student Name</th>
                       <th>Email</th>
+                      <th>Batch / Group</th>
                       <th>Linked Date</th>
                       <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStudents.map((s) => (
-                      <tr key={s.user_id}>
-                        <td>
-                          <div style={{ fontWeight: 600, color: 'var(--text)' }}>{s.display_name}</div>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--purple-l)' }}>ID: {generateStudentId({ ...s, is_institutional: true })}</span>
-                        </td>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.88rem' }}>{s.email}</td>
-                        <td style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-                          {s.linked_at ? new Date(s.linked_at).toLocaleDateString() : '—'}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveStudent(s.user_id, s.display_name)}
-                            style={{ background: 'none', border: 'none', color: 'var(--red-l)', cursor: 'pointer', fontSize: '0.82rem' }}
-                          >
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredStudents.map((s) => {
+                      const studentIdDisplay = generateStudentId({ ...s, is_institutional: true });
+                      return (
+                        <tr key={s.user_id}>
+                          <td>
+                            <div style={{ fontWeight: 600, color: 'var(--text)' }}>{s.display_name}</div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--purple-l)', fontWeight: 600 }}>ID: {studentIdDisplay}</span>
+                          </td>
+                          <td style={{ color: 'var(--muted)', fontSize: '0.88rem' }}>{s.email}</td>
+                          <td>
+                            <select
+                              className="text-input"
+                              value={s.batch_id || ''}
+                              onChange={(e) => handleAssignBatch(s.user_id, e.target.value)}
+                              style={{ padding: '4px 8px', fontSize: '0.82rem', width: 'auto' }}
+                            >
+                              <option value="">Unassigned</option>
+                              {batches.map((b) => (
+                                <option key={b.batch_id} value={b.batch_id}>
+                                  {b.name}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
+                            {s.linked_at ? new Date(s.linked_at).toLocaleDateString() : 'Today'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                className="btn-institution-outline"
+                                onClick={() => setSelectedStudent(s)}
+                                style={{ padding: '4px 10px', fontSize: '0.78rem' }}
+                              >
+                                View Details
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveStudent(s.user_id, s.display_name)}
+                                style={{ background: 'none', border: 'none', color: 'var(--red-l)', cursor: 'pointer', fontSize: '0.82rem', padding: '4px 6px' }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -460,6 +490,79 @@ const InstitutionStudents = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 5. Student Details Modal */}
+      {selectedStudent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: 'var(--card-bg, #0f172a)', border: '1px solid var(--border)', borderRadius: '16px', padding: '28px', maxWidth: '480px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--purple), var(--blue))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', color: '#fff', fontWeight: 'bold' }}>
+                  {(selectedStudent.display_name || 'S')[0].toUpperCase()}
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--text)' }}>{selectedStudent.display_name}</h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--purple-l)', fontWeight: 600 }}>
+                    ID: {generateStudentId({ ...selectedStudent, is_institutional: true })}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedStudent(null)}
+                style={{ background: 'none', border: 'none', color: 'var(--muted)', fontSize: '1.4rem', cursor: 'pointer', padding: '0 4px' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', padding: '16px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ color: 'var(--muted)' }}>Email Address:</span>
+                <strong style={{ color: 'var(--text)', wordBreak: 'break-all' }}>{selectedStudent.email}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ color: 'var(--muted)' }}>Membership Status:</span>
+                <span className="badge badge-active" style={{ textTransform: 'capitalize', fontSize: '0.75rem' }}>Active Member</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ color: 'var(--muted)' }}>Account Subtype:</span>
+                <strong style={{ color: 'var(--cyan-l)' }}>Institutional Student</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ color: 'var(--muted)' }}>Assigned Batch:</span>
+                <strong style={{ color: 'var(--purple-l)' }}>{selectedStudent.batch_name || 'Unassigned'}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.88rem' }}>
+                <span style={{ color: 'var(--muted)' }}>Joined Date:</span>
+                <strong style={{ color: 'var(--text)' }}>
+                  {selectedStudent.linked_at ? new Date(selectedStudent.linked_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Today'}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  handleRemoveStudent(selectedStudent.user_id, selectedStudent.display_name);
+                  setSelectedStudent(null);
+                }}
+                style={{ background: 'none', border: 'none', color: 'var(--red-l)', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Remove Student
+              </button>
+              <button
+                type="button"
+                className="btn-institution"
+                onClick={() => setSelectedStudent(null)}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -15,9 +15,22 @@ export const getInstitutionInitials = (institutionName) => {
 };
 
 export const generateStudentId = (student) => {
-  if (!student) return 'VP101';
+  if (!student) return 'VP-101';
 
-  const entryNumber = student.user_id || student.id || student.entry_number || 101;
+  let rawId = student.student_id || student.entry_number || student.user_id || student.id || 101;
+  let numStr = '101';
+
+  if (typeof rawId === 'number') {
+    numStr = String(rawId);
+  } else if (typeof rawId === 'string') {
+    const digits = rawId.match(/\d+/g);
+    if (digits && digits.length > 0) {
+      numStr = digits[digits.length - 1];
+    } else {
+      numStr = rawId.replace(/[^a-zA-Z0-9]/g, '').slice(-5).toUpperCase();
+    }
+  }
+
   const isInstitutional =
     student.student_subtype === 'institutional' ||
     student.is_institutional ||
@@ -28,10 +41,10 @@ export const generateStudentId = (student) => {
   if (isInstitutional) {
     const instName = student.institution_name || student.institution_code || student.join_code || 'INST';
     const initials = getInstitutionInitials(instName);
-    return `${initials}${entryNumber}`;
+    return `${initials}-${numStr}`;
   }
 
-  return `VP${entryNumber}`;
+  return `VP-${numStr}`;
 };
 
 /**
