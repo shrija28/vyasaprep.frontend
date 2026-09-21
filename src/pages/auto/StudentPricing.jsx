@@ -1,136 +1,238 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+
+const PLANS = [
+  {
+    key: 'free',
+    name: 'Free Access',
+    tagline: 'Basic KCET question bank & instant mock tests',
+    price: 0,
+    saveText: null,
+    badge: null,
+    badgeClass: '',
+    ctaLabel: 'Current Plan',
+    ctaClass: 'current',
+    disabled: true,
+    features: [
+      { text: '500+ Practice Questions', active: true },
+      { text: 'Standard Mock Tests', active: true },
+      { text: 'Basic Score Breakdown', active: true },
+      { text: 'AI Rank Predictor', active: false },
+      { text: 'Detailed Video Solutions', active: false },
+    ]
+  },
+  {
+    key: 'monthly',
+    name: 'Monthly Pass',
+    tagline: 'Full feature access for quick revision',
+    price: 499,
+    per: '/month',
+    saveText: 'SAVE 20%',
+    badge: 'POPULAR',
+    badgeClass: '',
+    ctaLabel: 'Upgrade Now →',
+    ctaClass: 'primary',
+    features: [
+      { text: '10,000+ KCET Question Bank', active: true },
+      { text: 'Unlimited Mock & Weekly Tests', active: true },
+      { text: 'Personalized AI Guidance', active: true },
+      { text: 'College Match Predictor', active: true },
+      { text: 'Detailed Step-by-Step Solutions', active: true },
+    ]
+  },
+  {
+    key: 'pro',
+    name: 'Pro Pass (3 Months)',
+    tagline: 'Comprehensive preparation for high scorers',
+    price: 999,
+    per: '/3 months',
+    saveText: 'BEST VALUE',
+    badge: 'RECOMMENDED',
+    badgeClass: '',
+    ctaLabel: 'Get Pro Pass →',
+    ctaClass: 'primary',
+    featured: true,
+    features: [
+      { text: 'All Monthly Pass Features', active: true },
+      { text: 'Priority AI Recommendations', active: true },
+      { text: 'Topic-wise Rank Booster', active: true },
+      { text: 'Previous 10 Years KCET Papers', active: true },
+      { text: '1-on-1 Performance Analytics', active: true },
+    ]
+  },
+  {
+    key: 'annual',
+    name: 'Annual Unlimited',
+    tagline: 'Complete 1-Year access for KCET 2026',
+    price: 1999,
+    per: '/year',
+    saveText: 'SAVE 60%',
+    badge: 'SUPER SAVER',
+    badgeClass: 'pc-trial-badge',
+    ctaLabel: 'Get Annual Access →',
+    ctaClass: 'trial',
+    features: [
+      { text: 'Everything in Pro Pass', active: true },
+      { text: 'Unlimited Retakes & Custom Sets', active: true },
+      { text: 'Full Institution Dashboard Integration', active: true },
+      { text: '24/7 Expert Doubt Support', active: true },
+      { text: 'Guaranteed Score Improvement Plan', active: true },
+    ]
+  }
+];
 
 const StudentPricing = () => {
+  const navigate = useNavigate();
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
+
+  const handleSelectPlan = (plan) => {
+    if (plan.disabled) return;
+    setSelectedPlan(plan);
+    setPayModalOpen(true);
+    setStatusMsg('');
+  };
+
+  const handlePayNow = () => {
+    if (!selectedPlan) return;
+    setProcessing(true);
+    setStatusMsg('Processing secure payment via Razorpay...');
+
+    setTimeout(() => {
+      setProcessing(false);
+      setStatusMsg(`🎉 Payment successful! You are now subscribed to ${selectedPlan.name}.`);
+      setTimeout(() => {
+        setPayModalOpen(false);
+        navigate('/dashboard');
+      }, 1800);
+    }, 1200);
+  };
+
   return (
     <>
-      {/* Auto-injected styles from HTML head */}
-      <style dangerouslySetInnerHTML={{ __html: `
-    /* ── Page base ── */
-    body { min-height:100vh; }
+      <div className="bg-mesh"></div>
 
-    /* ── Hero ── */
-    .ph { text-align:center;padding:52px 20px 32px; }
-    .ph h1 { font-size:2.4rem;font-weight:900;margin:0 0 10px;line-height:1.15; }
-    .ph p  { color:var(--muted);font-size:1rem;margin:0; }
-    .ph .grad { background:linear-gradient(90deg,#a78bfa,#60a5fa);-webkit-background-clip:text;-webkit-text-fill-color:transparent; }
-
-    /* ── Grid ── */
-    .pg { display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;max-width:1060px;margin:0 auto 60px;padding:0 24px; }
-    @media(max-width:640px){ .pg { grid-template-columns:1fr; } }
-    @media(min-width:900px){ .pg { grid-template-columns:repeat(4,1fr); } }
-
-    /* ── Card ── */
-    .pc { background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:32px 24px;display:flex;flex-direction:column;gap:0;position:relative;transition:transform .15s,box-shadow .15s,border-color .18s; }
-    .pc:hover { transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.32); }
-    .pc.featured { border-color:var(--purple-l,#a78bfa);box-shadow:0 0 0 1px var(--purple-l,#a78bfa),0 8px 28px rgba(124,58,237,.18); }
-
-    .pc-badge { position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#a78bfa,#60a5fa);color:#fff;font-size:.72rem;font-weight:800;padding:4px 16px;border-radius:20px;white-space:nowrap;letter-spacing:.02em; }
-    .pc-trial-badge { background:linear-gradient(90deg,#f59e0b,#d97706); }
-
-    .pc-name { font-size:1.05rem;font-weight:800;margin-bottom:4px;color:var(--text); }
-    .pc-tagline { font-size:.8rem;color:var(--muted);margin-bottom:20px;min-height:32px; }
-
-    .pc-price { margin-bottom:6px; }
-    .pc-price .amt  { font-size:2.8rem;font-weight:900;line-height:1;color:var(--text); }
-    .pc-price .sym  { font-size:1.4rem;font-weight:700;vertical-align:super;color:var(--text); }
-    .pc-price .per  { font-size:.82rem;color:var(--muted);margin-left:4px; }
-    .pc-save { font-size:.75rem;font-weight:700;color:var(--green-l);background:rgba(5,150,105,.15);padding:2px 10px;border-radius:12px;display:inline-block;margin-bottom:18px; }
-    .pc-nosave { height:22px;margin-bottom:18px; }
-
-    .pc-feats { list-style:none;margin:0 0 24px;padding:0;flex:1;display:flex;flex-direction:column;gap:9px; }
-    .pc-feats li { display:flex;align-items:flex-start;gap:9px;font-size:.84rem;line-height:1.35; }
-    .pc-feats li.yes { color:var(--text); }
-    .pc-feats li.no  { color:var(--muted);opacity:.6; }
-    .pc-feats li .ic { flex-shrink:0;margin-top:1px;font-size:.85rem; }
-
-    .pc-cta { width:100%;padding:13px;border-radius:10px;font-size:.92rem;font-weight:700;cursor:pointer;border:none;transition:opacity .15s,transform .12s,background .15s;margin-top:auto; }
-    .pc-cta:hover:not(:disabled) { opacity:.88;transform:translateY(-1px); }
-    .pc-cta.primary { background:linear-gradient(135deg,#a78bfa,#6366f1);color:#fff;box-shadow:0 4px 16px rgba(124,58,237,.3); }
-    .pc-cta.trial   { background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;box-shadow:0 4px 16px rgba(245,158,11,.3); }
-    .pc-cta.outline { background:transparent;border:1px solid var(--border);color:var(--text); }
-    .pc-cta.current { background:rgba(5,150,105,.15);border:1px solid rgba(5,150,105,.35);color:var(--green-l);cursor:default; }
-    .pc-cta:disabled { cursor:not-allowed; }
-
-    /* ── Pay modal ── */
-    .pmo { display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1000;align-items:center;justify-content:center; }
-    .pmd { background:var(--card-bg);border:1px solid var(--border);border-radius:16px;padding:36px;max-width:460px;width:90%;position:relative; }
-    .pmd h3 { font-size:1.25rem;font-weight:800;margin:0 0 4px; }
-    .pmd .pmo-sub { color:var(--muted);font-size:.85rem;margin-bottom:16px; }
-    .pmo-amt { font-size:2.6rem;font-weight:900;color:var(--purple-l,#a78bfa);margin-bottom:20px; }
-    .pmo-methods { display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px; }
-    .pm-badge { padding:5px 13px;border-radius:20px;font-size:.75rem;font-weight:600;background:var(--s2);border:1px solid var(--border);color:var(--muted2); }
-    .pmo-status { display:none;padding:12px 16px;border-radius:10px;font-size:.87rem;margin-bottom:14px; }
-    .pmo-actions { display:flex;gap:10px; }
-    .pmo-close { position:absolute;top:18px;right:18px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.3rem;line-height:1; }
-  
-` }} />
-      
-  <div className="bg-mesh"></div>
-
-  
-
-  <main>
-    
-    <div className="ph">
-      <h1>Unlock Your <span className="grad">KCET Success</span></h1>
-      <p>Choose the plan that fits your preparation style. Start free, upgrade anytime.</p>
-    </div>
-
-    
-    <div id="testPanel" style={{"display":"none","maxWidth":"1060px","margin":"0 auto 24px","padding":"0 24px"}}>
-      <div style={{"background":"rgba(217,119,6,0.08)","border":"1px solid rgba(217,119,6,0.3)","borderRadius":"12px","padding":"14px 18px"}}>
-        <div style={{"display":"flex","alignItems":"center","gap":"8px","marginBottom":"8px"}}>
-          <span>🧪</span>
-          <span style={{"fontSize":"0.78rem","fontWeight":"700","color":"var(--yellow-l)","textTransform":"uppercase","letterSpacing":"0.5px"}}>Test Mode — Demo Payment Credentials</span>
+      <main style={{ paddingBottom: '60px' }}>
+        <div className="ph" style={{ textAlign: 'center', padding: '52px 20px 32px' }}>
+          <h1 style={{ fontSize: '2.4rem', fontWeight: 900, marginBottom: '10px' }}>
+            Unlock Your <span style={{ background: 'linear-gradient(90deg,#a78bfa,#60a5fa)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>KCET Success</span>
+          </h1>
+          <p style={{ color: 'var(--muted)', fontSize: '1rem', margin: 0 }}>
+            Choose the plan that fits your preparation style. Start free, upgrade anytime.
+          </p>
         </div>
-        <div style={{"display":"flex","flexWrap":"wrap","gap":"12px","fontSize":"0.8rem"}}>
-          <div style={{"background":"var(--card-bg)","border":"1px solid var(--border)","borderRadius":"8px","padding":"8px 12px"}}>
-            <strong>💳 Card:</strong> <code style={{"color":"var(--green-l)"}}>5267 3181 8797 5449</code> · Expiry: 12/26 · CVV: 123 · OTP: 123456
-          </div>
-          <div style={{"background":"var(--card-bg)","border":"1px solid var(--border)","borderRadius":"8px","padding":"8px 12px"}}>
-            <strong>📱 UPI:</strong> <code style={{"color":"var(--green-l)"}}>success@razorpay</code> (success) · <code style={{"color":"var(--red-l)"}}>failure@razorpay</code> (fail)
+
+        {/* Plans Grid */}
+        <div className="pg" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px', maxWidth: '1060px', margin: '0 auto 40px', padding: '0 24px' }}>
+          {PLANS.map((plan) => (
+            <div key={plan.key} className={`pc ${plan.featured ? 'featured' : ''}`} style={{ background: 'var(--card)', border: plan.featured ? '2px solid var(--purple-l)' : '1px solid var(--border)', borderRadius: '16px', padding: '28px 22px', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+              {plan.badge && (
+                <span className={`pc-badge ${plan.badgeClass}`} style={{ position: 'absolute', top: '-13px', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(90deg,#a78bfa,#60a5fa)', color: '#fff', fontSize: '0.72rem', fontWeight: 800, padding: '4px 14px', borderRadius: '20px', whiteSpace: 'nowrap' }}>
+                  {plan.badge}
+                </span>
+              )}
+
+              <div className="pc-name" style={{ fontSize: '1.1rem', fontWeight: 800, marginBottom: '4px', color: 'var(--text)' }}>
+                {plan.name}
+              </div>
+              <div className="pc-tagline" style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '16px', minHeight: '36px' }}>
+                {plan.tagline}
+              </div>
+
+              <div className="pc-price" style={{ marginBottom: '6px' }}>
+                <span className="sym" style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)' }}>₹</span>
+                <span className="amt" style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--text)' }}>{plan.price}</span>
+                {plan.per && <span className="per" style={{ fontSize: '0.82rem', color: 'var(--muted)', marginLeft: '4px' }}>{plan.per}</span>}
+              </div>
+
+              {plan.saveText ? (
+                <span className="pc-save" style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--green-l)', background: 'rgba(5,150,105,0.15)', padding: '2px 10px', borderRadius: '12px', display: 'inline-block', marginBottom: '16px' }}>
+                  {plan.saveText}
+                </span>
+              ) : (
+                <div style={{ height: '22px', marginBottom: '16px' }}></div>
+              )}
+
+              <ul className="pc-feats" style={{ listStyle: 'none', margin: '0 0 24px', padding: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {plan.features.map((f, idx) => (
+                  <li key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', color: f.active ? 'var(--text)' : 'var(--muted)', opacity: f.active ? 1 : 0.5 }}>
+                    <span>{f.active ? '✅' : '❌'}</span>
+                    <span>{f.text}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                type="button"
+                className={`pc-cta ${plan.ctaClass}`}
+                disabled={plan.disabled}
+                onClick={() => handleSelectPlan(plan)}
+                style={{ width: '100%', padding: '12px', borderRadius: '10px', fontSize: '0.92rem', fontWeight: 700, cursor: plan.disabled ? 'default' : 'pointer', border: 'none', background: plan.disabled ? 'rgba(255,255,255,0.06)' : 'linear-gradient(135deg,#a78bfa,#6366f1)', color: '#fff' }}
+              >
+                {plan.ctaLabel}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '0.85rem' }}>
+          🔒 Secured by Razorpay · Instant activation · Cancel anytime
+        </p>
+      </main>
+
+      {/* Payment Modal */}
+      {payModalOpen && selectedPlan && (
+        <div className="pmo" style={{ display: 'flex', position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, alignItems: 'center', justifyContent: 'center' }}>
+          <div className="pmd" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '16px', padding: '32px', maxWidth: '440px', width: '90%', position: 'relative' }}>
+            <button type="button" className="pmo-close" onClick={() => setPayModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: '1.4rem' }}>
+              ✕
+            </button>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 4px' }}>Confirm Subscription</h3>
+            <div className="pmo-sub" style={{ color: 'var(--muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Upgrading to <strong>{selectedPlan.name}</strong>
+            </div>
+
+            <div className="pmo-amt" style={{ fontSize: '2.5rem', fontWeight: 900, color: 'var(--purple-l)', marginBottom: '20px' }}>
+              ₹{selectedPlan.price} <span style={{ fontSize: '0.9rem', color: 'var(--muted)' }}>{selectedPlan.per}</span>
+            </div>
+
+            <div className="pmo-methods" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '20px' }}>
+              <span className="pm-badge" style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', background: 'var(--s2)', border: '1px solid var(--border)', color: 'var(--text)' }}>📱 UPI</span>
+              <span className="pm-badge" style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', background: 'var(--s2)', border: '1px solid var(--border)', color: 'var(--text)' }}>💳 Cards</span>
+              <span className="pm-badge" style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '0.75rem', background: 'var(--s2)', border: '1px solid var(--border)', color: 'var(--text)' }}>🏦 Net Banking</span>
+            </div>
+
+            {statusMsg && (
+              <div style={{ padding: '10px 14px', borderRadius: '8px', background: statusMsg.includes('successful') ? 'rgba(5,150,105,0.15)' : 'rgba(124,58,237,0.15)', color: statusMsg.includes('successful') ? 'var(--green-l)' : 'var(--purple-l)', fontSize: '0.85rem', marginBottom: '16px', textAlign: 'center' }}>
+                {statusMsg}
+              </div>
+            )}
+
+            <div className="pmo-actions" style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                className="pc-cta outline"
+                onClick={() => setPayModalOpen(false)}
+                style={{ flex: 1, padding: '12px', borderRadius: '8px', background: 'none', border: '1px solid var(--border)', color: 'var(--text)', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="pc-cta primary"
+                disabled={processing}
+                onClick={handlePayNow}
+                style={{ flex: 2, padding: '12px', borderRadius: '8px', background: 'linear-gradient(135deg,#a78bfa,#6366f1)', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+              >
+                {processing ? 'Processing...' : 'Pay Now →'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
-
-    
-    <div className="pg" id="plansGrid">
-      <div style={{"gridColumn":"1/-1","textAlign":"center","color":"var(--muted)","padding":"40px"}}>Loading plans…</div>
-    </div>
-
-    <p style={{"textAlign":"center","color":"var(--muted)","fontSize":".8rem","marginBottom":"56px"}}>
-      Secured by Razorpay · Cancel anytime · No hidden charges
-    </p>
-  </main>
-
-  
-  <div className="pmo" id="payModal">
-    <div className="pmd">
-      <button className="pmo-close" >✕</button>
-      <h3 id="payModalTitle">Confirm Payment</h3>
-      <div className="pmo-sub" id="payModalSub"></div>
-      <div className="pmo-amt" id="payModalAmt">—</div>
-      <div className="pmo-methods">
-        <span className="pm-badge">📱 UPI</span>
-        <span className="pm-badge">💳 Visa / Mastercard</span>
-        <span className="pm-badge">🏧 RuPay</span>
-        <span className="pm-badge">🏦 Net Banking</span>
-        <span className="pm-badge">📲 GPay / PhonePe / Paytm</span>
-      </div>
-      <div className="pmo-status" id="payStatus"></div>
-      <div className="pmo-actions">
-        <button className="pc-cta outline"  style={{"flex":"1"}}>Cancel</button>
-        <button className="pc-cta primary" id="payNowBtn"  style={{"flex":"2"}}>Pay Now →</button>
-      </div>
-      <p style={{"fontSize":".72rem","color":"var(--muted)","textAlign":"center","marginTop":"14px"}}>🔒 Secured by Razorpay · Payment data is never stored here</p>
-    </div>
-  </div>
-
-  
-  
-
+      )}
     </>
   );
 };

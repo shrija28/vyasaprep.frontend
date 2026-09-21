@@ -261,8 +261,8 @@ const InstitutionStudents = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredStudents.map((s) => {
-                      const studentIdDisplay = generateStudentId({ ...s, is_institutional: true });
+                    {filteredStudents.map((s, index) => {
+                      const studentIdDisplay = generateStudentId({ ...s, is_institutional: true }, index);
                       return (
                         <tr key={s.user_id}>
                           <td>

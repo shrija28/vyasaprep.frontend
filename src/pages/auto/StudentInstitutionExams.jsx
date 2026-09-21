@@ -1,106 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
-
-const normalizeExamResponse = (data) => {
-  if (!data) return [];
-
-  // Format 1: Backend returns { subjects: [ { subject: 'Physics', exams: [...] } ] }
-  if (Array.isArray(data.subjects)) {
-    return data.subjects
-      .map((group) => {
-        const filteredExams = (group.exams || []).filter((ex) => ex.is_published !== false);
-        return {
-          ...group,
-          exams: filteredExams,
-          available_exams: filteredExams.length,
-        };
-      })
-      .filter((group) => group.exams.length > 0);
-  }
-
-  // Format 2: Flat exam array in data.exams, data.data, or data directly
-  let rawExams = [];
-  if (Array.isArray(data.exams)) {
-    rawExams = data.exams;
-  } else if (Array.isArray(data)) {
-    rawExams = data;
-  } else if (data && Array.isArray(data.data)) {
-    rawExams = data.data;
-  }
-
-  const validExams = rawExams.filter((ex) => ex.is_published !== false);
-
-  const groupsMap = {};
-  validExams.forEach((ex) => {
-    const subj = ex.subject || 'General';
-    if (!groupsMap[subj]) {
-      groupsMap[subj] = { subject: subj, exams: [], available_exams: 0 };
-    }
-    groupsMap[subj].exams.push(ex);
-    groupsMap[subj].available_exams += 1;
-  });
-
-  return Object.values(groupsMap);
-};
+import { getStoredExams, mergeExamsWithLocal, normalizeExamSubjects, subscribeToExamChanges } from '../../utils/examStore';
 
 const StudentInstitutionExams = () => {
-  const [subjects, setSubjects] = useState([]);
+  const [subjects, setSubjects] = useState(() => normalizeExamSubjects(getStoredExams()));
+  const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('STD-001');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const fetchProfileAndExams = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        let profile = null;
-        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-        if (meRes.ok) {
-          profile = await meRes.json();
-          if (profile.authenticated) {
-            setStudentId(generateStudentId(profile));
-          }
+  const fetchProfileAndExams = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      let profile = null;
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      if (meRes.ok) {
+        profile = await meRes.json();
+        if (profile.authenticated) {
+          const name = profile.name || profile.full_name || profile.username || (profile.email ? profile.email.split('@')[0] : '');
+          if (name) setStudentName(name);
+
+          if (profile.kcet_student_id) setStudentId(profile.kcet_student_id);
+          else setStudentId(generateStudentId(profile));
         }
+      }
 
-        // Fetch from student / institution endpoints
-        let res = await fetch('/api/student/exams', { credentials: 'include' });
-        let data = null;
+      // Fetch from student / institution endpoints
+      let res = await fetch('/api/student/exams', { credentials: 'include' });
+      let data = null;
 
+      if (res.ok) {
+        data = await res.json().catch(() => null);
+      }
+
+      if (!data) {
+        res = await fetch('/api/student/institution/exams', { credentials: 'include' });
         if (res.ok) {
           data = await res.json().catch(() => null);
         }
-
-        if (!data) {
-          res = await fetch('/api/student/institution/exams', { credentials: 'include' });
-          if (res.ok) {
-            data = await res.json().catch(() => null);
-          }
-        }
-
-        if (!data) {
-          res = await fetch('/api/institution/content/exams', { credentials: 'include' });
-          if (res.ok) {
-            data = await res.json().catch(() => null);
-          }
-        }
-
-        if (data) {
-          const parsedSubjects = normalizeExamResponse(data);
-          setSubjects(parsedSubjects);
-        } else {
-          setError('Could not load exams for your institution');
-        }
-      } catch (err) {
-        console.error('Error fetching institution exams:', err);
-        setError('Network error while loading exams');
-      } finally {
-        setLoading(false);
       }
-    };
 
+      if (!data) {
+        res = await fetch('/api/institution/content/exams', { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      }
+
+      const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
+      const mergedList = mergeExamsWithLocal(fetchedList);
+      const parsedSubjects = normalizeExamSubjects(mergedList);
+      setSubjects(parsedSubjects);
+    } catch (err) {
+      console.error('Error fetching institution exams:', err);
+      const fallbackList = getStoredExams();
+      setSubjects(normalizeExamSubjects(fallbackList));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProfileAndExams();
+
+    const unsubscribe = subscribeToExamChanges((updatedList) => {
+      setSubjects(normalizeExamSubjects(updatedList));
+    });
+
+    return () => unsubscribe();
   }, []);
 
   return (
@@ -113,7 +82,9 @@ const StudentInstitutionExams = () => {
             <h1 className="dash-title">
               Institution <span className="hero-gradient">Exams</span>
             </h1>
-            <p className="dash-sub">Published exams for your institution — paper sets assigned via Student ID ({studentId})</p>
+            <p className="dash-sub">
+              Published exams for your institution — paper sets assigned to <strong>{studentName}</strong> (Student ID: <strong style={{ color: 'var(--purple-l)' }}>{studentId}</strong>)
+            </p>
           </div>
         </div>
 

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { getStoredExams, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
 
 const InstitutionDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [batches, setBatches] = useState([]);
-  const [exams, setExams] = useState([]);
+  const [exams, setExams] = useState(getStoredExams());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
@@ -28,15 +29,24 @@ const InstitutionDashboard = () => {
       }
 
       // 3. Exams
+      let fetchedList = [];
       const examRes = await fetch('/api/institution/content/exams', { credentials: 'include' });
       if (examRes.ok) {
         const eData = await examRes.json();
-        setExams(eData.exams || []);
+        fetchedList = eData.exams || eData.data || (Array.isArray(eData) ? eData : []);
       }
+      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      const merged = mergeExamsWithLocal(fetchedList).map(ex => {
+        const subMatches = localSubs.filter(s => s.exam_set_id === ex.exam_id || s.exam_id === ex.exam_id || (ex.sets || []).some(st => st.exam_set_id === s.exam_set_id));
+        const totalCompletions = Math.max(ex.completion_count || 0, subMatches.length);
+        return { ...ex, completion_count: totalCompletions };
+      });
+      setExams(merged);
 
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch (err) {
       if (!isSilent) setError('Unable to load dashboard data');
+      setExams(getStoredExams());
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -44,6 +54,26 @@ const InstitutionDashboard = () => {
 
   useEffect(() => {
     fetchDashboard(false);
+    const unsubscribe = subscribeToExamChanges((updatedList) => {
+      setExams(updatedList);
+    });
+
+    const handleUpdate = () => {
+      fetchDashboard(true);
+    };
+
+    window.addEventListener('exam-submitted', handleUpdate);
+    window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('exam-submitted', handleUpdate);
+      window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
   }, [fetchDashboard]);
 
   const batchStudentsSum = batches.reduce((sum, b) => sum + (b.student_count ?? b.students_count ?? (Array.isArray(b.students) ? b.students.length : 0)), 0);

@@ -84,6 +84,12 @@ function App() {
             <Route path="/student-institution-exams" element={<StudentInstitutionExams />} />
             <Route path="/student-institution-leaderboard" element={<StudentInstitutionLeaderboard />} />
             <Route path="/student-institution-performance" element={<StudentInstitutionPerformance />} />
+            
+            <Route path="/student/institution" element={<Navigate to="/student/institution/dashboard" replace />} />
+            <Route path="/student/institution/dashboard" element={<StudentInstitutionDashboard />} />
+            <Route path="/student/institution/exams" element={<StudentInstitutionExams />} />
+            <Route path="/student/institution/leaderboard" element={<StudentInstitutionLeaderboard />} />
+            <Route path="/student/institution/performance" element={<StudentInstitutionPerformance />} />
           </Route>
 
           {/* Admin Routes */}

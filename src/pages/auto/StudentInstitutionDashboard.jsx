@@ -1,421 +1,364 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getStoredExams, subscribeToExamChanges } from '../../utils/examStore';
+import { generateStudentId, extractStudentName } from '../../utils/studentId';
+
+const MOCK_COLLEGES = {
+  target: [
+    { name: 'BMS College of Engineering (BMSCE), Bengaluru', branch: 'Computer Science & Engineering', cutoffRank: 1250, location: 'Bengaluru' },
+    { name: 'MS Ramaiah Institute of Technology (MSRIT)', branch: 'Information Science & Engineering', cutoffRank: 1840, location: 'Bengaluru' },
+  ],
+  reach: [
+    { name: 'RV College of Engineering (RVCE)', branch: 'Computer Science & Engineering', cutoffRank: 420, location: 'Bengaluru' },
+    { name: 'PES University (Ring Road Campus)', branch: 'Artificial Intelligence & Machine Learning', cutoffRank: 780, location: 'Bengaluru' },
+  ],
+  safe: [
+    { name: 'Dayananda Sagar College of Engineering (DSCE)', branch: 'Computer Science & Engineering', cutoffRank: 3200, location: 'Bengaluru' },
+    { name: 'Bangalore Institute of Technology (BIT)', branch: 'Electronics & Communication', cutoffRank: 4500, location: 'Bengaluru' },
+  ]
+};
 
 const StudentInstitutionDashboard = () => {
+  const [activeExams, setActiveExams] = useState(() => getStoredExams().filter(e => e.is_published !== false));
+  const [studentName, setStudentName] = useState(() => extractStudentName(null));
+  const [studentId, setStudentId] = useState('—');
+  const [institutionName, setInstitutionName] = useState('Institution');
+  const [examsTaken, setExamsTaken] = useState(0);
+  const [avgScore, setAvgScore] = useState('0.0%');
+  const [cohortRank, setCohortRank] = useState('—');
+  const [activeTab, setActiveTab] = useState('target');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [desiredRank, setDesiredRank] = useState('');
+  const [rankSuggestion, setRankSuggestion] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(() => new Date().toLocaleTimeString());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadDashboardData = () => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(res => res.json())
+      .then(profile => {
+        if (profile.authenticated) {
+          const name = extractStudentName(profile);
+          if (name && name !== 'Student') setStudentName(name);
+
+          if (profile.kcet_student_id) setStudentId(profile.kcet_student_id);
+          else if (profile.sub && !profile.sub.includes('@')) setStudentId(profile.sub);
+          else setStudentId(generateStudentId(profile));
+
+          if (profile.institution_name) setInstitutionName(profile.institution_name);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/student/dashboard-stats', { credentials: 'include' })
+      .then(res => res.json())
+      .then(stats => {
+        if (stats && !stats.error) {
+          const name = extractStudentName(stats.student) || extractStudentName(stats);
+          if (name && name !== 'Student') setStudentName(name);
+
+          if (stats.student?.kcet_student_id) setStudentId(stats.student.kcet_student_id);
+          else if (stats.kpis?.studentId) setStudentId(stats.kpis.studentId);
+
+          if (stats.student?.institution_name) setInstitutionName(stats.student.institution_name);
+
+          const taken = stats.kpis?.examsTaken ?? stats.kpis?.submissions ?? 0;
+          setExamsTaken(taken);
+
+          const avg = stats.kpis?.avgScore !== undefined ? stats.kpis.avgScore : 0;
+          setAvgScore(`${avg}%`);
+
+          const rankStr = stats.kpis?.cohortRank || stats.student?.cohort_rank || '—';
+          setCohortRank(rankStr);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadDashboardData();
+    const unsubscribe = subscribeToExamChanges((updatedList) => {
+      setActiveExams(updatedList.filter(e => e.is_published !== false));
+    });
+
+    const handleUpdate = () => {
+      loadDashboardData();
+      setActiveExams(getStoredExams().filter(e => e.is_published !== false));
+      setLastUpdated(new Date().toLocaleTimeString());
+    };
+
+    window.addEventListener('exam-submitted', handleUpdate);
+    window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('exam-submitted', handleUpdate);
+      window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
+  }, []);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadDashboardData();
+    setTimeout(() => {
+      setActiveExams(getStoredExams().filter(e => e.is_published !== false));
+      setLastUpdated(new Date().toLocaleTimeString());
+      setRefreshing(false);
+    }, 400);
+  };
+
+  const handleGetSuggestions = () => {
+    const num = parseInt(desiredRank, 10);
+    if (!num || num <= 0) {
+      setRankSuggestion('⚠️ Please enter a target KCET rank e.g. 3000.');
+      return;
+    }
+
+    if (num <= 1000) {
+      setRankSuggestion(`🎯 Target Rank ${num}: Aim for 165+/180 overall. Maintain 95%+ accuracy in Mathematics & Physics.`);
+    } else if (num <= 5000) {
+      setRankSuggestion(`🚀 Target Rank ${num}: Aim for 135+/180 overall. Solve past weekly tests and focus on weak topics.`);
+    } else {
+      setRankSuggestion(`🛡️ Target Rank ${num}: Aim for 105+/180 overall. Practice speed management on 60-minute mock sets.`);
+    }
+  };
+
+  const filteredColleges = MOCK_COLLEGES[activeTab].filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.branch.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.location.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <>
-      {/* Auto-injected styles from HTML head */}
-      <style dangerouslySetInnerHTML={{ __html: `
-    /* ── Institution-specific overrides (built on top of style.css) ────── */
+      <div className="bg-mesh"></div>
 
-    /* Institution access banner */
-    .inst-access-bar {
-      position: relative; z-index: 1;
-      background: linear-gradient(90deg, rgba(37,99,235,0.14), rgba(124,58,237,0.14));
-      border-bottom: 1px solid rgba(124,58,237,0.22);
-      padding: 9px 28px;
-      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    }
-    .inst-label-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: rgba(124,58,237,0.15);
-      border: 1px solid rgba(124,58,237,0.3);
-      border-radius: 20px; padding: 3px 12px;
-      font-size: 0.72rem; font-weight: 700;
-      color: var(--purple-l); letter-spacing: 0.06em; text-transform: uppercase;
-    }
-    .inst-name-label { font-size: 0.9rem; font-weight: 700; color: var(--text); }
-    .inst-access-status {
-      margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
-      border-radius: 20px; padding: 3px 12px;
-      font-size: 0.72rem; font-weight: 700;
-    }
-    .inst-access-status.active  { background: rgba(5,150,105,0.14); border: 1px solid rgba(5,150,105,0.3); color: var(--green-l); }
-    .inst-access-status.inactive{ background: rgba(220,38,38,0.12);  border: 1px solid rgba(220,38,38,0.3);  color: var(--red-l); }
-
-    /* Profile cards grid */
-    .profile-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 14px; margin-bottom: 24px;
-    }
-    .profile-card {
-      background: var(--s1); border: 1px solid var(--border);
-      border-radius: var(--r); padding: 16px 18px;
-    }
-    .profile-card-label {
-      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em;
-      color: var(--muted); margin-bottom: 5px; font-weight: 700;
-    }
-    .profile-card-val {
-      font-size: 0.95rem; font-weight: 700; color: var(--text);
-      word-break: break-word;
-    }
-    .profile-card-val.mono { font-family: 'Cascadia Code', monospace; color: var(--purple-l); }
-
-    /* 4-column KPI row for this dashboard */
-    .inst-kpi-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 14px; margin-bottom: 24px;
-    }
-    @media(max-width: 800px) { .inst-kpi-row { grid-template-columns: repeat(2,1fr); } }
-    @media(max-width: 480px) { .inst-kpi-row { grid-template-columns: 1fr; } }
-
-    /* Section grid (2 cols) */
-    .inst-section-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
-    }
-    @media(max-width: 880px) { .inst-section-grid { grid-template-columns: 1fr; } }
-
-    /* Section header icon — constrained size */
-    .inst-sec-icon {
-      width: 30px; height: 30px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; font-size: 1rem;
-    }
-
-    /* Exam list inside sections */
-    .inst-exam-list { list-style: none; padding: 0; margin: 0; }
-    .inst-exam-row {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
-    }
-    .inst-exam-row:last-child { border-bottom: none; }
-    .inst-exam-subject { flex: 1; font-size: 0.85rem; font-weight: 600; }
-    .inst-exam-tag {
-      font-size: 0.68rem; font-weight: 700; padding: 2px 8px;
-      border-radius: 8px; white-space: nowrap;
-    }
-    .inst-exam-tag.platform    { background: rgba(8,145,178,0.12); border: 1px solid rgba(8,145,178,0.25); color: var(--cyan-l); }
-    .inst-exam-tag.institution { background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.25); color: var(--purple-l); }
-    .inst-exam-sets { font-size: 0.68rem; color: var(--muted); }
-    .inst-start-btn {
-      font-size: 0.72rem; padding: 4px 10px; border-radius: 6px;
-      background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.3);
-      color: var(--purple-l); cursor: pointer; text-decoration: none;
-      transition: background 0.15s; white-space: nowrap;
-    }
-    .inst-start-btn:hover { background: rgba(124,58,237,0.22); }
-
-    /* Leaderboard table */
-    .inst-lb-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-    .inst-lb-table th {
-      text-align: left; padding: 8px 12px; font-size: 0.68rem;
-      text-transform: uppercase; letter-spacing: 0.05em;
-      color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 700;
-    }
-    .inst-lb-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
-    .inst-lb-table tr:last-child td { border-bottom: none; }
-    .inst-lb-table tr.mine { background: rgba(124,58,237,0.07); }
-    .lb-rank { text-align: center; font-size: 1rem; }
-    .lb-name { font-weight: 600; }
-    .lb-id   { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
-    .lb-you  { font-size: 0.68rem; color: var(--purple-l); margin-left: 4px; }
-
-    /* Empty state for sections */
-    .inst-empty { text-align: center; padding: 28px 16px; color: var(--muted); font-size: 0.83rem; }
-
-    /* Quick-action buttons full width */
-    .qa-btn {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      width: 100%; padding: 10px 16px; border-radius: var(--rs);
-      font-size: 0.85rem; font-weight: 600; cursor: pointer;
-      text-decoration: none; transition: all 0.18s;
-    }
-    .qa-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-    .qa-btn.primary { background: linear-gradient(135deg, var(--purple), var(--blue)); border: none; color: white; box-shadow: 0 2px 12px rgba(124,58,237,0.3); }
-    .qa-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 18px rgba(124,58,237,0.45); }
-    .qa-btn.outline { background: transparent; border: 1px solid var(--border2); color: var(--text); }
-    .qa-btn.outline:hover { border-color: rgba(124,58,237,0.4); background: rgba(124,58,237,0.06); }
-  
-` }} />
-      
-  <div className="bg-mesh"></div>
-
-  
-  
-
-  
-  <div className="inst-access-bar" id="accessBar">
-    <span className="inst-label-badge">🏫 Institution Student</span>
-    <span className="inst-name-label" id="instName">Loading…</span>
-    <span className="inst-access-status inactive" id="accessStatus">Checking…</span>
-  </div>
-
-  <main className="dash-main">
-
-    
-    <div className="dash-hero">
-      <div>
-        <h1 className="dash-title">Institution <span className="hero-gradient">Dashboard</span></h1>
-        <p className="dash-sub" id="dashSub">Your institution exam platform</p>
-      </div>
-      <div className="dash-hero-right">
-        <div className="last-updated" id="lastUpdated">Last updated: —</div>
-        <button className="btn-outline" >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{"width":"14px","height":"14px"}}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-          Refresh
-        </button>
-      </div>
-    </div>
-
-    
-    <div id="stateLoading" style={{"textAlign":"center","padding":"60px 20px","color":"var(--muted)"}}>
-      <div style={{"fontSize":"1.8rem","marginBottom":"10px"}}>⏳</div>
-      <p>Loading your dashboard…</p>
-    </div>
-    <div id="stateError" style={{"display":"none","textAlign":"center","padding":"60px 20px","color":"var(--muted)"}}>
-      <div style={{"fontSize":"1.8rem","marginBottom":"10px"}}>⚠️</div>
-      <p id="errMsg">Could not load profile. Please refresh.</p>
-    </div>
-
-    
-    <div id="mainContent" style={{"display":"none"}}>
-
-      
-      <div className="profile-grid" id="profileGrid"></div>
-
-      
-      <div className="inst-kpi-row">
-        <div className="kpi-tile">
-          <div className="kpi-tile-icon purple">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-          </div>
-          <div className="kpi-tile-body">
-            <div className="kpi-tile-val" id="kpiExams">0</div>
-            <div className="kpi-tile-label">Exams Taken</div>
-          </div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-tile-icon cyan">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
-          </div>
-          <div className="kpi-tile-body">
-            <div className="kpi-tile-val" id="kpiAvg">0%</div>
-            <div className="kpi-tile-label">Avg Score</div>
-          </div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-tile-icon green">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          </div>
-          <div className="kpi-tile-body">
-            <div className="kpi-tile-val" id="kpiPass">0%</div>
-            <div className="kpi-tile-label">Pass Rate</div>
-          </div>
-        </div>
-        <div className="kpi-tile">
-          <div className="kpi-tile-icon orange">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15l-3 3h6l-3-3z"/><path d="M5 9l7-7 7 7"/><path d="M4 19h16"/></svg>
-          </div>
-          <div className="kpi-tile-body">
-            <div className="kpi-tile-val" id="kpiRank">—</div>
-            <div className="kpi-tile-label">Institution Rank</div>
-          </div>
-        </div>
+      {/* Top Banner */}
+      <div className="inst-access-bar" style={{ background: 'linear-gradient(90deg, rgba(37,99,235,0.14), rgba(124,58,237,0.14))', borderBottom: '1px solid rgba(124,58,237,0.22)', padding: '10px 28px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+        <span className="inst-label-badge" style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: '20px', padding: '3px 12px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--purple-l)', textTransform: 'uppercase' }}>
+          🏫 Institution Student
+        </span>
+        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text)' }}>
+          {institutionName} • <span style={{ color: 'var(--purple-l)' }}>{studentName}</span> ({studentId})
+        </span>
+        <span style={{ marginLeft: 'auto', background: 'rgba(5,150,105,0.14)', border: '1px solid rgba(5,150,105,0.3)', color: 'var(--green-l)', borderRadius: '20px', padding: '3px 12px', fontSize: '0.72rem', fontWeight: 700 }}>
+          ● Active Access
+        </span>
       </div>
 
-      
-      <div className="section-card" id="collegeRecSection" style={{"marginBottom":"24px","display":"none"}}>
-        <div className="ai-block-header" style={{"paddingBottom":"12px","borderBottom":"1px solid var(--border)","display":"flex","alignItems":"center","justifyContent":"space-between","flexWrap":"wrap","gap":"12px","marginBottom":"16px"}}>
-          <div style={{"display":"flex","alignItems":"center","gap":"12px"}}>
-            <div style={{"fontSize":"1.5rem"}}>🎓</div>
-            <div>
-              <h2 style={{"fontSize":"1rem","fontWeight":"700","margin":"0"}}>College Match Predictor</h2>
-              <p className="section-sub" style={{"margin":"2px 0 0 0"}} id="recSubtitle">Based on your average performance</p>
-            </div>
-          </div>
-          <div className="inst-exam-tag platform" id="predictedRankBadge" style={{"fontWeight":"bold","fontSize":"0.8rem","padding":"4px 12px","borderRadius":"20px","textTransform":"none"}}>Projected Rank: Calculating...</div>
-        </div>
-
-        <div style={{"display":"flex","justifyContent":"space-between","alignItems":"center","flexWrap":"wrap","gap":"12px","marginBottom":"16px"}}>
-          
-          <div style={{"display":"flex","gap":"8px"}} id="recTabs">
-            <button className="nav-pill active" id="recTabTarget" >🎯 Target (<span id="targetCount">0</span>)</button>
-            <button className="nav-pill" id="recTabReach" >🚀 Reach (<span id="reachCount">0</span>)</button>
-            <button className="nav-pill" id="recTabSafe" >🛡️ Safe (<span id="safeCount">0</span>)</button>
-          </div>
-          
-          <div className="results-search" style={{"margin":"0","maxWidth":"250px"}}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="collegeSearchInput" className="search-input" placeholder="Search colleges..." />
-          </div>
-        </div>
-
-        <div id="collegesGrid" style={{"display":"grid","gridTemplateColumns":"repeat(auto-fit, minmax(280px, 1fr))","gap":"16px"}}>
-          
-        </div>
-      </div>
-
-      
-      <div className="section-card" id="aiGuidanceSection" style={{"marginBottom":"24px","display":"none"}}>
-        <div className="section-card-header">
-          <div className="inst-sec-icon" style={{"background":"rgba(124,58,237,0.18)","fontSize":"1.3rem"}}>🤖</div>
+      <main className="dash-main" style={{ paddingBottom: '60px' }}>
+        {/* Header */}
+        <div className="dash-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '24px' }}>
           <div>
-            <h2 style={{"fontSize":"0.97rem","marginBottom":"2px"}}>Personalized AI Guidance</h2>
-            <p className="section-sub">Smart recommendations based on your scores</p>
+            <h1 className="dash-title">Institution <span className="hero-gradient">Dashboard</span></h1>
+            <p className="dash-sub">
+              Welcome back, <strong style={{ color: 'var(--text)', fontSize: '1rem' }}>{studentName}</strong>! • Student ID: <strong style={{ color: 'var(--purple-l)' }}>{studentId}</strong>
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Last updated: {lastUpdated}</span>
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer' }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
           </div>
         </div>
-        <div className="section-body" style={{"padding":"16px 20px"}}>
 
-          
-          <div style={{"display":"grid","gridTemplateColumns":"repeat(auto-fit,minmax(170px,1fr))","gap":"12px","marginBottom":"20px"}}>
-            <div style={{"background":"rgba(5,150,105,0.08)","border":"1px solid rgba(5,150,105,0.2)","borderRadius":"var(--rs)","padding":"12px"}}>
-              <div style={{"fontSize":"0.72rem","fontWeight":"700","color":"var(--green-l)","textTransform":"uppercase","letterSpacing":".05em","marginBottom":"6px"}}>✅ Strong</div>
-              <ul id="instStrongList" style={{"margin":"0","padding":"0","listStyle":"none","fontSize":"0.82rem","color":"var(--text)"}}></ul>
-            </div>
-            <div style={{"background":"rgba(217,119,6,0.08)","border":"1px solid rgba(217,119,6,0.2)","borderRadius":"var(--rs)","padding":"12px"}}>
-              <div style={{"fontSize":"0.72rem","fontWeight":"700","color":"var(--yellow-l,#fbbf24)","textTransform":"uppercase","letterSpacing":".05em","marginBottom":"6px"}}>📈 Can Improve</div>
-              <ul id="instImproveList" style={{"margin":"0","padding":"0","listStyle":"none","fontSize":"0.82rem","color":"var(--text)"}}></ul>
-            </div>
-            <div style={{"background":"rgba(220,38,38,0.08)","border":"1px solid rgba(220,38,38,0.2)","borderRadius":"var(--rs)","padding":"12px"}}>
-              <div style={{"fontSize":"0.72rem","fontWeight":"700","color":"var(--red-l,#f87171)","textTransform":"uppercase","letterSpacing":".05em","marginBottom":"6px"}}>⚠️ Needs Focus</div>
-              <ul id="instWeakList" style={{"margin":"0","padding":"0","listStyle":"none","fontSize":"0.82rem","color":"var(--text)"}}></ul>
-            </div>
+        {/* Profile Card Summary */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px 18px' }}>
+            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>STUDENT NAME</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)', marginTop: '4px' }}>{studentName}</div>
           </div>
-
-          
-          <div id="boosterBlock" style={{"display":"none","marginBottom":"20px"}}>
-            <div style={{"fontSize":"0.82rem","fontWeight":"700","color":"var(--muted2)","marginBottom":"8px"}}>🚀 Rank Booster Action Plan</div>
-            <div id="boosterMeta" style={{"fontSize":"0.8rem","color":"var(--muted)","marginBottom":"10px"}}></div>
-            <ul id="boosterList" style={{"margin":"0","padding":"0 0 0 18px","fontSize":"0.84rem","color":"var(--text)","lineHeight":"1.8"}}></ul>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px 18px' }}>
+            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>STUDENT ID</div>
+            <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--purple-l)', fontFamily: 'monospace', marginTop: '4px' }}>{studentId}</div>
           </div>
-
-          
-          <div style={{"background":"var(--s2)","border":"1px solid var(--border)","borderRadius":"var(--rs)","padding":"14px"}}>
-            <div style={{"fontSize":"0.82rem","fontWeight":"700","color":"var(--muted2)","marginBottom":"10px"}}>🎯 Suggestions to Reach a Specific Rank</div>
-            <div style={{"display":"flex","gap":"8px","alignItems":"center","flexWrap":"wrap"}}>
-              <input type="number" id="instDesiredRank" className="text-input" placeholder="Enter desired rank e.g. 5000" min="1" style={{"flex":"1","minWidth":"180px","maxWidth":"260px","padding":"8px 12px","fontSize":"0.85rem"}}/>
-              <button className="btn-primary small" id="instGetSuggestionsBtn">Get Suggestions</button>
-            </div>
-            <div id="instSuggestionsResult" style={{"marginTop":"12px","display":"none"}}></div>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px 18px' }}>
+            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>EXAMS TAKEN</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)', marginTop: '4px' }}>{examsTaken} Completed</div>
           </div>
-
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px 18px' }}>
+            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>AVERAGE SCORE</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--green-l)', marginTop: '4px' }}>{avgScore}</div>
+          </div>
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px 18px' }}>
+            <div style={{ fontSize: '0.68rem', textTransform: 'uppercase', color: 'var(--muted)', fontWeight: 700 }}>COHORT RANK</div>
+            <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text)', marginTop: '4px' }}>{cohortRank}</div>
+          </div>
         </div>
-      </div>
 
-      
-      <div className="inst-section-grid">
+        {/* Section Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+          {/* 1. Available Exams */}
+          <div className="section-card">
+            <div className="section-card-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ fontSize: '1.05rem', margin: 0 }}>📚 Available Weekly Exams</h2>
+                <p className="section-sub" style={{ margin: '2px 0 0 0' }}>Published by your institution</p>
+              </div>
+              <Link to="/student/institution/exams" style={{ fontSize: '0.82rem', color: 'var(--purple-l)', textDecoration: 'none', fontWeight: 600 }}>
+                View all ({activeExams.length}) →
+              </Link>
+            </div>
+            <div className="section-body" style={{ padding: '16px 20px' }}>
+              {activeExams.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>No published exams available yet.</div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {activeExams.slice(0, 4).map((exam, i) => {
+                    const name = exam.exam_name || exam.name || 'Weekly Test';
+                    const firstSetId = exam.sets && exam.sets.length > 0 ? exam.sets[0].exam_set_id : (exam.exam_id || exam.id || '');
+                    return (
+                      <li key={exam.exam_id || i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)' }}>{name}</div>
+                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{exam.subject || 'Mathematics'} • {exam.duration_minutes || 60} Mins</div>
+                        </div>
+                        <Link
+                          to={`/exam?set=${firstSetId}&subject=${encodeURIComponent(exam.subject || 'Mathematics')}&name=${encodeURIComponent(name)}`}
+                          className="btn-primary small"
+                          style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
+                        >
+                          Take Test →
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
 
-        
+          {/* 2. Quick Actions */}
+          <div className="section-card">
+            <div className="section-card-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+              <h2 style={{ fontSize: '1.05rem', margin: 0 }}>⚡ Quick Actions</h2>
+              <p className="section-sub" style={{ margin: '2px 0 0 0' }}>Jump directly to key tools</p>
+            </div>
+            <div className="section-body" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <Link to="/student/institution/exams" className="qa-btn primary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', background: 'linear-gradient(135deg, var(--purple), var(--blue))', color: '#fff', textDecoration: 'none', fontWeight: 600 }}>
+                📝 View All Assigned Exams
+              </Link>
+              <Link to="/student/institution/performance" className="qa-btn outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--text)', textDecoration: 'none', fontWeight: 600 }}>
+                📈 Full Performance Analytics
+              </Link>
+              <Link to="/student/institution/leaderboard" className="qa-btn outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--text)', textDecoration: 'none', fontWeight: 600 }}>
+                🏆 Institution Cohort Rankings
+              </Link>
+              <Link to="/syllabus" className="qa-btn outline" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', color: 'var(--text)', textDecoration: 'none', fontWeight: 600 }}>
+                📖 KCET Official Syllabus & Topics
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Rank Suggestions */}
+        <div className="section-card" style={{ marginBottom: '24px' }}>
+          <div className="section-card-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+            <h2 style={{ fontSize: '1.05rem', margin: 0 }}>🎯 Target Rank Suggestions</h2>
+            <p className="section-sub" style={{ margin: '2px 0 0 0' }}>Enter your dream KCET rank to receive an action plan</p>
+          </div>
+          <div className="section-body" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: rankSuggestion ? '14px' : '0' }}>
+              <input
+                type="number"
+                className="text-input"
+                placeholder="Enter desired rank e.g. 2500"
+                value={desiredRank}
+                onChange={(e) => setDesiredRank(e.target.value)}
+                min="1"
+                style={{ flex: 1, minWidth: '200px', maxWidth: '300px', padding: '8px 12px' }}
+              />
+              <button
+                type="button"
+                className="btn-primary small"
+                onClick={handleGetSuggestions}
+                style={{ padding: '8px 16px' }}
+              >
+                Get Suggestions
+              </button>
+            </div>
+            {rankSuggestion && (
+              <div style={{ padding: '12px', background: 'rgba(124,58,237,0.12)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text)' }}>
+                {rankSuggestion}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* College Match Predictor */}
         <div className="section-card">
-          <div className="section-card-header">
-            <div className="inst-sec-icon" style={{"background":"rgba(124,58,237,0.15)"}}>📚</div>
+          <div className="section-card-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h2 style={{"fontSize":"0.88rem","marginBottom":"2px"}}>Available Exams</h2>
-              <p className="section-sub">Institution &amp; platform exams</p>
+              <h2 style={{ fontSize: '1.05rem', margin: 0 }}>🎓 College Match Predictor</h2>
+              <p className="section-sub" style={{ margin: '2px 0 0 0' }}>Explore matched engineering colleges</p>
             </div>
-            <span id="examCountBadge" style={{"marginLeft":"auto","fontSize":"0.72rem","color":"var(--muted)","background":"var(--s3)","borderRadius":"10px","padding":"2px 8px","marginRight":"8px"}}>
-              {JSON.parse(localStorage.getItem('mockAdminExams') || '[]').filter(e => e.status === 'Active').length}
-            </span>
-            <Link to="/student/institution/exams" style={{"fontSize":"0.72rem","color":"var(--purple-l)","textDecoration":"none"}}>View all →</Link>
+            <div className="results-search" style={{ margin: 0, maxWidth: '240px' }}>
+              <input
+                type="text"
+                className="text-input"
+                placeholder="Filter colleges..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+              />
+            </div>
           </div>
-          <div className="section-body" style={{"padding":"16px 20px"}}>
-            <ul className="inst-exam-list" id="examList">
-              {(() => {
-                const exams = JSON.parse(localStorage.getItem('mockAdminExams') || '[]').filter(e => e.status === 'Active');
-                if (exams.length === 0) {
-                  return <li className="inst-empty">No exams available yet.</li>;
-                }
-                return exams.map((exam, i) => (
-                  <li key={i} className="inst-exam-row">
-                    <div style={{ flex: 1 }}>
-                      <div className="inst-exam-subject">{exam.name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{exam.subject} • {exam.sets} Sets</div>
+
+          <div className="section-body" style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px' }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('target')}
+                style={{ padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--border)', background: activeTab === 'target' ? 'var(--purple-l)' : 'transparent', color: activeTab === 'target' ? '#fff' : 'var(--text)', cursor: 'pointer' }}
+              >
+                🎯 Target ({MOCK_COLLEGES.target.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('reach')}
+                style={{ padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--border)', background: activeTab === 'reach' ? 'var(--purple-l)' : 'transparent', color: activeTab === 'reach' ? '#fff' : 'var(--text)', cursor: 'pointer' }}
+              >
+                🚀 Reach ({MOCK_COLLEGES.reach.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('safe')}
+                style={{ padding: '6px 14px', borderRadius: '20px', border: '1px solid var(--border)', background: activeTab === 'safe' ? 'var(--purple-l)' : 'transparent', color: activeTab === 'safe' ? '#fff' : 'var(--text)', cursor: 'pointer' }}
+              >
+                🛡️ Safe ({MOCK_COLLEGES.safe.length})
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+              {filteredColleges.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>No colleges match your filter.</div>
+              ) : (
+                filteredColleges.map((col, idx) => (
+                  <div key={idx} style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text)', marginBottom: '4px' }}>{col.name}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--purple-l)', fontWeight: 600 }}>{col.branch}</div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '8px' }}>
+                      📍 {col.location} • 🎯 Cutoff Rank: ~{col.cutoffRank}
                     </div>
-                    <Link to={`/exam?subject=${exam.subject}&name=${encodeURIComponent(exam.name)}`} className="inst-start-btn">Take Exam</Link>
-                  </li>
-                ));
-              })()}
-            </ul>
-          </div>
-        </div>
-
-        
-        <div className="section-card">
-          <div className="section-card-header">
-            <div className="inst-sec-icon" style={{"background":"rgba(217,119,6,0.15)"}}>🏆</div>
-            <div>
-              <h2 style={{"fontSize":"0.88rem","marginBottom":"2px"}}>Institution Leaderboard</h2>
-              <p className="section-sub">Top performers in your institution</p>
-            </div>
-            <Link to="/student/institution/leaderboard" style={{"marginLeft":"auto","fontSize":"0.72rem","color":"var(--purple-l)","textDecoration":"none"}}>View all →</Link>
-          </div>
-          <div className="section-body" style={{"padding":"0"}}>
-            <table className="inst-lb-table">
-              <thead><tr>
-                <th style={{"width":"42px"}}>Rank</th>
-                <th>Student</th>
-                <th>Avg</th>
-                <th>Exams</th>
-              </tr></thead>
-              <tbody id="lbBody">
-                <tr><td colspan="4" className="inst-empty">Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        
-        <div className="section-card">
-          <div className="section-card-header">
-            <div className="inst-sec-icon" style={{"background":"rgba(5,150,105,0.15)"}}>📈</div>
-            <div>
-              <h2 style={{"fontSize":"0.88rem","marginBottom":"2px"}}>My Performance</h2>
-              <p className="section-sub">Recent exam results</p>
-            </div>
-            <Link to="/student/institution/performance" style={{"marginLeft":"auto","fontSize":"0.72rem","color":"var(--purple-l)","textDecoration":"none"}}>Full history →</Link>
-          </div>
-          <div className="section-body" style={{"padding":"0","maxHeight":"300px","overflowY":"auto"}}>
-            <table className="results-table">
-              <thead><tr>
-                <th>Subject</th><th>Set</th><th>Score</th><th>Status</th>
-              </tr></thead>
-              <tbody id="perfBody">
-                <tr><td colspan="4" style={{"textAlign":"center","padding":"20px","color":"var(--muted)"}}>Loading…</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        
-        <div className="section-card">
-          <div className="section-card-header">
-            <div className="inst-sec-icon" style={{"background":"rgba(37,99,235,0.15)"}}>⚡</div>
-            <div>
-              <h2 style={{"fontSize":"0.88rem","marginBottom":"2px"}}>Quick Actions</h2>
-              <p className="section-sub">Jump to key features</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-          <div className="section-body" style={{"display":"flex","flexDirection":"column","gap":"10px"}}>
-            <Link to="/student/institution/exams" className="qa-btn primary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-              View My Exams
-            </Link>
-            <Link to="/student/institution/performance" className="qa-btn outline">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              Full Analytics
-            </Link>
-            <Link to="/student/institution/leaderboard" className="qa-btn outline">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 15l-3 3h6l-3-3z"/><path d="M5 9l7-7 7 7"/></svg>
-              Institution Rankings
-            </Link>
-            <Link to="/syllabus" className="qa-btn outline">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-              KCET Syllabus
-            </Link>
-          </div>
         </div>
-
-      </div>
-    </div>
-  </main>
-
-  
-  
-  
-
+      </main>
     </>
   );
 };

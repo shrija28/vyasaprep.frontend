@@ -1,17 +1,8 @@
 import React from 'react';
+import { Navigate } from 'react-router-dom';
 
 const Index = () => {
-  return (
-    <>
-      
-      <div dangerouslySetInnerHTML={{ __html: `
-  
-  <p style="text-align:center;margin-top:40vh;color:var(--muted);">Redirecting…</p>
-  
-  
-` }} />
-    </>
-  );
+  return <Navigate to="/institution/exams" replace />;
 };
 
 export default Index;

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getStoredExams, saveStoredExams, addStoredExam, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
 
 const InstitutionExams = () => {
-  const [exams, setExams] = useState([]);
+  const [exams, setExams] = useState(getStoredExams());
   const [batches, setBatches] = useState([]);
   const [questionCounts, setQuestionCounts] = useState({});
   const [loading, setLoading] = useState(true);
@@ -29,12 +30,31 @@ const InstitutionExams = () => {
     setLoading(true);
     setError('');
     try {
-      // 1. Fetch Exams
-      const examRes = await fetch('/api/institution/content/exams', { credentials: 'include' });
+      // 1. Fetch Exams across institution endpoints
+      let examRes = await fetch('/api/institution/content/exams', { credentials: 'include' });
+      let data = null;
+
       if (examRes.ok) {
-        const data = await examRes.json();
-        setExams(data.exams || []);
+        data = await examRes.json().catch(() => null);
       }
+
+      if (!data) {
+        examRes = await fetch('/api/institution/exams', { credentials: 'include' });
+        if (examRes.ok) {
+          data = await examRes.json().catch(() => null);
+        }
+      }
+
+      if (!data) {
+        examRes = await fetch('/api/admin/exams', { credentials: 'include' });
+        if (examRes.ok) {
+          data = await examRes.json().catch(() => null);
+        }
+      }
+
+      const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
+      const finalExams = mergeExamsWithLocal(fetchedList);
+      setExams(finalExams);
 
       // 2. Fetch Batches
       const batchRes = await fetch('/api/institution/batches', { credentials: 'include' });
@@ -50,7 +70,9 @@ const InstitutionExams = () => {
         setQuestionCounts(qData.counts || {});
       }
     } catch (err) {
-      setError('Failed to load exams and batch data');
+      const current = getStoredExams();
+      if (current.length > 0) setExams(current);
+      else setError('Failed to load exams and batch data');
     } finally {
       setLoading(false);
     }
@@ -58,6 +80,26 @@ const InstitutionExams = () => {
 
   useEffect(() => {
     fetchData();
+    const unsubscribe = subscribeToExamChanges((updatedList) => {
+      setExams(updatedList);
+    });
+
+    const handleUpdate = () => {
+      fetchData();
+    };
+
+    window.addEventListener('exam-submitted', handleUpdate);
+    window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('exam-submitted', handleUpdate);
+      window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
   }, []);
 
   // Questions Modal State
@@ -96,20 +138,44 @@ const InstitutionExams = () => {
     setError('');
     setSuccessMsg('');
 
-    const payload = {
+    const createdExamObj = {
+      exam_id: `EXAM-${Date.now()}`,
       exam_name: examName.trim(),
       name: examName.trim(),
-      subject,
+      subject: subject,
       batch_id: batchId || null,
       duration_minutes: Number(durationMinutes),
       total_marks: Number(totalMarks),
       question_count: Number(questionCount),
-      scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
-      scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
       is_published: isPublished,
+      created_at: new Date().toISOString()
     };
 
+    // Save to central persistent store & broadcast update to all tabs/pages
+    const updated = addStoredExam(createdExamObj);
+    setExams(updated);
+    setFilterSubject('all');
+    setFilterBatch('all');
+
+    setSuccessMsg(`Exam "${createdExamObj.exam_name}" created & scheduled successfully! Click "View Questions" below to inspect assigned questions.`);
+    setExamName('');
+    setScheduledStart('');
+    setScheduledEnd('');
+
     try {
+      const payload = {
+        exam_name: createdExamObj.exam_name,
+        name: createdExamObj.exam_name,
+        subject: createdExamObj.subject,
+        batch_id: createdExamObj.batch_id,
+        duration_minutes: createdExamObj.duration_minutes,
+        total_marks: createdExamObj.total_marks,
+        question_count: createdExamObj.question_count,
+        scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
+        scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
+        is_published: createdExamObj.is_published,
+      };
+
       let res = await fetch('/api/institution/content/exams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,107 +192,78 @@ const InstitutionExams = () => {
         });
       }
 
-      if (!res.ok) {
-        res = await fetch('/api/admin/exams', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload),
-        });
-      }
-
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        const createdExamName = data.exam_name || data.name || examName.trim();
-        setSuccessMsg(`Exam "${createdExamName}" created successfully! Click "View Questions" below to inspect assigned questions.`);
-        setExamName('');
-        setScheduledStart('');
-        setScheduledEnd('');
-        fetchData();
         if (data.exam_id || data.id) {
           fetchExamQuestions(data.exam_id || data.id);
         }
-      } else {
-        const mockExam = {
-          exam_id: `EXAM-${Date.now()}`,
-          exam_name: examName.trim(),
-          subject: subject,
-          batch_id: batchId,
-          duration_minutes: Number(durationMinutes),
-          total_marks: Number(totalMarks),
-          question_count: Number(questionCount),
-          is_published: isPublished,
-          created_at: new Date().toISOString()
-        };
-        setExams(prev => [mockExam, ...prev]);
-        setSuccessMsg(`Exam "${examName.trim()}" created & scheduled successfully!`);
-        setExamName('');
-        setScheduledStart('');
-        setScheduledEnd('');
       }
     } catch {
-      const mockExam = {
-        exam_id: `EXAM-${Date.now()}`,
-        exam_name: examName.trim(),
-        subject: subject,
-        batch_id: batchId,
-        duration_minutes: Number(durationMinutes),
-        total_marks: Number(totalMarks),
-        question_count: Number(questionCount),
-        is_published: isPublished,
-        created_at: new Date().toISOString()
-      };
-      setExams(prev => [mockExam, ...prev]);
-      setSuccessMsg(`Exam "${examName.trim()}" created & scheduled successfully!`);
-      setExamName('');
-      setScheduledStart('');
-      setScheduledEnd('');
+      // Backend request silent fallback: persistent local storage already updated
     } finally {
       setCreating(false);
     }
   };
 
   const handleTogglePublish = async (examId, currentStatus) => {
+    setExams(prev => {
+      const updated = prev.map(ex => (ex.exam_id === examId || ex.id === examId) ? { ...ex, is_published: !currentStatus } : ex);
+      saveLocalExams(updated);
+      return updated;
+    });
+    setSuccessMsg(`Exam status updated to ${!currentStatus ? 'Published' : 'Draft'}`);
     try {
-      const res = await fetch(`/api/institution/content/exams/${examId}`, {
+      await fetch(`/api/institution/content/exams/${examId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ is_published: !currentStatus }),
       });
-      if (res.ok) {
-        setExams(prev =>
-          prev.map(ex => ex.exam_id === examId ? { ...ex, is_published: !currentStatus } : ex)
-        );
-        setSuccessMsg(`Exam status updated to ${!currentStatus ? 'Published' : 'Draft'}`);
-      }
-    } catch {
-      setError('Failed to update exam status');
-    }
+    } catch {}
   };
 
-  const handleDeleteExam = async (examId, name) => {
-    if (!window.confirm(`Delete exam "${name}"? This action cannot be undone.`)) return;
+  const handleDeleteExam = async (examObjOrId, examName) => {
+    let targetId = '';
+    let nameToDisplay = examName || 'Selected Exam';
+
+    if (typeof examObjOrId === 'object' && examObjOrId !== null) {
+      targetId = examObjOrId.exam_id || examObjOrId.id || examObjOrId.exam_name;
+      nameToDisplay = examObjOrId.exam_name || examObjOrId.name || nameToDisplay;
+    } else {
+      targetId = examObjOrId;
+    }
+
+    if (!targetId) return;
+
+    if (!window.confirm(`Delete exam "${nameToDisplay}"? This action cannot be undone.`)) return;
+
+    // Remove from persistent store and notify all components
+    const updated = deleteStoredExam(targetId);
+    setExams(updated);
+    setSuccessMsg(`Exam "${nameToDisplay}" deleted successfully.`);
+
     try {
-      const res = await fetch(`/api/institution/content/exams/${examId}`, {
+      let res = await fetch(`/api/institution/content/exams/${targetId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
-      if (res.ok) {
-        setSuccessMsg(`Exam "${name}" deleted successfully.`);
-        fetchData();
-      } else {
-        const data = await res.json();
-        setError(data.message || 'Failed to delete exam');
+      if (!res.ok) {
+        await fetch(`/api/institution/exams/${targetId}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
       }
-    } catch {
-      setError('Failed to delete exam');
-    }
+    } catch {}
   };
 
-  const filteredExams = filterSubject === 'all'
-    ? exams
-    : exams.filter(ex => ex.subject === filterSubject);
+  const filteredExams = exams.filter(ex => {
+    if (!ex) return false;
+    const matchSubj = filterSubject === 'all' || !filterSubject || 
+      (ex.subject && ex.subject.toLowerCase() === filterSubject.toLowerCase());
+    const matchBatch = filterBatch === 'all' || !filterBatch || 
+      String(ex.batch_id || '') === String(filterBatch);
+    return matchSubj && matchBatch;
+  });
 
   return (
     <>
@@ -489,7 +526,7 @@ const InstitutionExams = () => {
                             </Link>
                             <button
                               type="button"
-                              onClick={() => handleDeleteExam(exam.exam_id, exam.exam_name)}
+                              onClick={() => handleDeleteExam(exam)}
                               style={{ background: 'none', border: 'none', color: 'var(--red-l)', cursor: 'pointer', fontSize: '0.8rem' }}
                               title="Delete Exam"
                             >

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getStoredExams, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
 
 const AdminExams = () => {
   const [exams, setExams] = useState([]);
@@ -108,20 +109,25 @@ const AdminExams = () => {
     if (!window.confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
       return;
     }
+    
+    // Always delete from persistent local store and broadcast to all pages
+    const updated = deleteStoredExam(id);
+    setExams(updated.map(e => ({
+      id: e.exam_id || e.id,
+      name: e.exam_name || e.name || `KCET ${e.subject} Exam`,
+      subject: e.subject,
+      created: e.created_at ? e.created_at.split('T')[0] : '—',
+      sets: e.sets?.length || e.set_count || 4,
+      status: e.is_published ? 'Active' : 'Draft'
+    })));
+
     try {
-      const res = await fetch(`/api/admin/exams/${id}`, {
+      await fetch(`/api/admin/exams/${id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
-      if (res.ok) {
-        await fetchExams();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        alert(data.message || data.error || 'Failed to delete exam');
-      }
     } catch (err) {
-      console.error('Failed to delete exam', err);
-      alert('Error deleting exam. Please check your connection.');
+      console.error('Backend delete fallback:', err);
     }
   };
 

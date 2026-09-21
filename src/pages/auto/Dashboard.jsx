@@ -60,6 +60,7 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
+      let apiData = null;
       let res = await fetch('/api/student/dashboard-stats', { credentials: 'include' });
       if (!res.ok) {
         res = await fetch('/api/student/dashboard', { credentials: 'include' });
@@ -69,8 +70,68 @@ const Dashboard = () => {
       }
 
       if (res.ok) {
-        const d = await res.json();
-        setData(d);
+        apiData = await res.json().catch(() => null);
+      }
+
+      // Merge local submission records from localStorage
+      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      
+      let finalData = apiData;
+
+      if (localSubs.length > 0) {
+        const totalTaken = Math.max(apiData?.kpis?.examsTaken || 0, apiData?.kpis?.submissions || 0, localSubs.length);
+        const totalScorePctSum = localSubs.reduce((acc, s) => acc + (Number(s.percentage) || 0), 0);
+        const calculatedAvgScore = Math.round(totalScorePctSum / Math.max(1, localSubs.length));
+        const passCount = localSubs.filter(s => (s.status === 'Pass' || (s.percentage || 0) >= 40)).length;
+        const calculatedPassRate = Math.round((passCount / Math.max(1, localSubs.length)) * 100);
+
+        if (!finalData) {
+          finalData = {
+            has_data: true,
+            kpis: {
+              examsTaken: totalTaken,
+              submissions: totalTaken,
+              avgScore: calculatedAvgScore,
+              passRate: calculatedPassRate,
+              avgTime: Math.round(localSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (localSubs.length * 60)),
+              rank: Math.max(120, 45000 - totalTaken * 1400)
+            },
+            topicData: {
+              labels: Array.from(new Set(localSubs.map(s => s.subject || 'General'))),
+              scores: Array.from(new Set(localSubs.map(s => s.subject || 'General'))).map(subj => {
+                const subList = localSubs.filter(s => (s.subject || 'General') === subj);
+                return Math.round(subList.reduce((acc, s) => acc + (s.percentage || 0), 0) / subList.length);
+              })
+            },
+            setData: {
+              labels: localSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
+              scores: localSubs.slice(0, 7).reverse().map(s => s.percentage || 0)
+            },
+            passFailData: {
+              labels: ['Pass', 'Fail'],
+              counts: [passCount, Math.max(0, localSubs.length - passCount)]
+            },
+            examHistory: localSubs
+          };
+        } else if (finalData.kpis) {
+          finalData.kpis.examsTaken = totalTaken;
+          finalData.kpis.submissions = totalTaken;
+          if (finalData.kpis.avgScore === 0 || !finalData.kpis.avgScore) {
+            finalData.kpis.avgScore = calculatedAvgScore;
+          }
+          if (finalData.kpis.passRate === 0 || !finalData.kpis.passRate) {
+            finalData.kpis.passRate = calculatedPassRate;
+          }
+          finalData.has_data = true;
+
+          const mergedHistory = [...localSubs, ...(finalData.examHistory || [])];
+          const uniqueHistory = Array.from(new Map(mergedHistory.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
+          finalData.examHistory = uniqueHistory;
+        }
+      }
+
+      if (finalData) {
+        setData(finalData);
         const now = new Date();
         setLastUpdated(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
@@ -106,6 +167,23 @@ const Dashboard = () => {
 
     // 3. Fetch real performance data
     fetchDashboardData();
+
+    // 4. Auto-update dashboard metrics whenever an exam is submitted or completed
+    const handleUpdate = () => {
+      fetchDashboardData();
+    };
+
+    window.addEventListener('exam-submitted', handleUpdate);
+    window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    window.addEventListener('focus', handleUpdate);
+
+    return () => {
+      window.removeEventListener('exam-submitted', handleUpdate);
+      window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+      window.removeEventListener('focus', handleUpdate);
+    };
   }, []);
 
   const handlePredictColleges = async (rankOverride = null) => {

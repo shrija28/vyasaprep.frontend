@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
+import { getStoredExams, mergeExamsWithLocal, normalizeExamSubjects } from '../../utils/examStore';
 
 // High-precision face & liveness analyzer that verifies an actual human face is present
 // and strictly rejects covered cameras, black frames, blank walls, and Windows "Camera Off" placeholders.
@@ -160,6 +161,295 @@ const analyzeFaceInVideo = async (video, prevFrameRef) => {
     console.error("Face analysis error:", err);
     return { detected: false, confidence: 0, reason: 'Analyzing camera feed...' };
   }
+};
+
+const getFallbackQuestionsForSubject = (subj = 'Biology', examTitle = '') => {
+  const normalized = String(subj || examTitle || '').toLowerCase();
+
+  if (normalized.includes('bio')) {
+    return [
+      {
+        id: 'q1',
+        text: 'Which cell organelle is known as the powerhouse of the cell due to ATP synthesis?',
+        options: ['Mitochondria', 'Lysosome', 'Golgi Apparatus', 'Endoplasmic Reticulum'],
+        topic: 'Cell Biology',
+        subtype: 'theory_definition',
+        explanation: 'Mitochondria generate ATP through oxidative phosphorylation during cellular respiration.',
+        marks: 1
+      },
+      {
+        id: 'q2',
+        text: 'In DNA double-helix structure, Adenine forms hydrogen bonds specifically with:',
+        options: ['Thymine', 'Cytosine', 'Guanine', 'Uracil'],
+        topic: 'Molecular Genetics',
+        subtype: 'theory_definition',
+        explanation: 'According to Chargaff rules, Adenine pairs with Thymine via two hydrogen bonds in DNA.',
+        marks: 1
+      },
+      {
+        id: 'q3',
+        text: 'Which plant hormone is primarily responsible for apical dominance and cell elongation in shoot tips?',
+        options: ['Auxin (IAA)', 'Gibberellin', 'Cytokinin', 'Abscisic Acid (ABA)'],
+        topic: 'Plant Physiology',
+        subtype: 'theory_definition',
+        explanation: 'Auxin synthesized in shoot apical meristems promotes stem elongation and inhibits lateral buds.',
+        marks: 1
+      },
+      {
+        id: 'q4',
+        text: 'The structural and functional unit of the human kidney responsible for filtration and reabsorption is the:',
+        options: ['Nephron', 'Neuron', 'Alveolus', 'Glomerulus'],
+        topic: 'Human Physiology',
+        subtype: 'theory_definition',
+        explanation: 'Each human kidney contains approximately one million nephrons that produce urine.',
+        marks: 1
+      },
+      {
+        id: 'q5',
+        text: 'In green plants, the light-dependent reactions of photosynthesis occur in which region of the chloroplast?',
+        options: ['Thylakoid Membrane', 'Stroma', 'Outer Membrane', 'Cristae'],
+        topic: 'Photosynthesis',
+        subtype: 'theory_definition',
+        explanation: 'Thylakoid membranes contain Photosystems I and II where solar energy is absorbed to produce ATP and NADPH.',
+        marks: 1
+      },
+      {
+        id: 'q6',
+        text: 'Which enzyme unwinds the double-stranded DNA molecule during replication?',
+        options: ['DNA Helicase', 'DNA Polymerase III', 'DNA Ligase', 'RNA Primase'],
+        topic: 'Molecular Biology',
+        subtype: 'theory_definition',
+        explanation: 'DNA Helicase breaks hydrogen bonds between nitrogenous bases to unzip the double helix.',
+        marks: 1
+      },
+      {
+        id: 'q7',
+        text: 'The plant vascular tissue responsible for the translocation of organic food substances (photosynthates) is:',
+        options: ['Phloem', 'Xylem', 'Parenchyma', 'Cambium'],
+        topic: 'Plant Anatomy',
+        subtype: 'theory_definition',
+        explanation: 'Phloem sieve tubes transport sucrose and amino acids from photosynthetic source leaves to sink organs.',
+        marks: 1
+      },
+      {
+        id: 'q8',
+        text: 'Which hormone secreted by the pancreas lowers blood glucose concentration by promoting cellular uptake?',
+        options: ['Insulin', 'Glucagon', 'Somatostatin', 'Adrenaline'],
+        topic: 'Endocrine System',
+        subtype: 'theory_definition',
+        explanation: 'Beta cells of the Islets of Langerhans release insulin in response to elevated blood glucose levels.',
+        marks: 1
+      },
+      {
+        id: 'q9',
+        text: 'In an ecological pyramid of energy, approximately what percentage of energy is transferred to the next trophic level?',
+        options: ['10%', '50%', '25%', '90%'],
+        topic: 'Ecology',
+        subtype: 'theory_definition',
+        explanation: 'According to Lindeman 10% Energy Law, only ~10% of total energy passes to successive trophic levels.',
+        marks: 1
+      },
+      {
+        id: 'q10',
+        text: 'The molecular scissors extensively used in recombinant DNA technology to cut DNA at specific palindromic sequences are:',
+        options: ['Restriction Endonucleases', 'DNA Ligases', 'Reverse Transcriptases', 'Taq Polymerases'],
+        topic: 'Biotechnology',
+        subtype: 'theory_definition',
+        explanation: 'Restriction endonucleases recognize specific palindromic sequences and cleave double-stranded DNA.',
+        marks: 1
+      }
+    ];
+  }
+
+  if (normalized.includes('phys')) {
+    return [
+      {
+        id: 'q1',
+        text: "According to Snell's Law of refraction, the ratio sin(i) / sin(r) is equal to:",
+        options: ["Refractive index of medium 2 with respect to medium 1", "Speed of light in vacuum", "Critical angle of medium", "Focal length of lens"],
+        topic: "Optics",
+        subtype: "theory_definition",
+        explanation: "Snell's Law states sin(i)/sin(r) = n2/n1.",
+        marks: 1
+      },
+      {
+        id: 'q2',
+        text: "The SI unit of magnetic flux density (B) is:",
+        options: ["Tesla (T)", "Weber (Wb)", "Henry (H)", "Gauss (G)"],
+        topic: "Electromagnetism",
+        subtype: "theory_definition",
+        explanation: "1 Tesla = 1 Weber per square meter (Wb/m²).",
+        marks: 1
+      },
+      {
+        id: 'q3',
+        text: "In a simple harmonic motion (SHM), the total mechanical energy is proportional to:",
+        options: ["Square of Amplitude (A²)", "Amplitude (A)", "Frequency (f)", "Square root of Amplitude (√A)"],
+        topic: "Harmonic Motion",
+        subtype: "theory_definition",
+        explanation: "Total SHM energy E = (1/2) m ω² A², proportional to A².",
+        marks: 1
+      },
+      {
+        id: 'q4',
+        text: "The phenomenon responsible for the brilliant colors in thin soap bubbles is:",
+        options: ["Thin-film Interference", "Diffraction", "Polarization", "Refraction"],
+        topic: "Wave Optics",
+        subtype: "theory_definition",
+        explanation: "Interference of light reflected from front and back surfaces creates spectral color bands.",
+        marks: 1
+      },
+      {
+        id: 'q5',
+        text: "Self-inductance of a long solenoid carrying current is directly proportional to:",
+        options: ["Square of total number of turns (N²)", "Number of turns (N)", "Current (I)", "Flux density B"],
+        topic: "Electromagnetic Induction",
+        subtype: "theory_definition",
+        explanation: "L = (μ0 N² A) / l, hence self-inductance scales as N².",
+        marks: 1
+      }
+    ];
+  }
+
+  if (normalized.includes('chem')) {
+    return [
+      {
+        id: 'q1',
+        text: "Which element has the highest electronegativity on the Pauling scale?",
+        options: ["Fluorine (F)", "Oxygen (O)", "Chlorine (Cl)", "Nitrogen (N)"],
+        topic: "Periodic Trends",
+        subtype: "theory_definition",
+        explanation: "Fluorine is the most electronegative element with a Pauling electronegativity of 3.98.",
+        marks: 1
+      },
+      {
+        id: 'q2',
+        text: "The molecular geometry and bond angle of methane (CH4) according to VSEPR theory are:",
+        options: ["Tetrahedral, 109.5°", "Trigonal Planar, 120°", "Linear, 180°", "Pyramidal, 107°"],
+        topic: "Chemical Bonding",
+        subtype: "theory_definition",
+        explanation: "CH4 has 4 bond pairs and 0 lone pairs around carbon, giving sp3 tetrahedral geometry.",
+        marks: 1
+      },
+      {
+        id: 'q3',
+        text: "According to Le Chatelier's Principle, increasing total pressure on a gaseous equilibrium system shifts position toward:",
+        options: ["Side with fewer moles of gas", "Side with greater moles of gas", "Reactants side always", "Products side always"],
+        topic: "Chemical Equilibrium",
+        subtype: "theory_definition",
+        explanation: "Increasing pressure favors the reaction direction that reduces total gas volume/moles.",
+        marks: 1
+      },
+      {
+        id: 'q4',
+        text: "The hybridization state of carbon atoms in a benzene ring (C6H6) is:",
+        options: ["sp2", "sp3", "sp", "sp3d"],
+        topic: "Organic Chemistry",
+        subtype: "theory_definition",
+        explanation: "Each carbon in benzene forms 3 sigma bonds in a planar hexagonal structure (sp2).",
+        marks: 1
+      },
+      {
+        id: 'q5',
+        text: "Which gas is evolved when sodium bicarbonate reacts with dilute hydrochloric acid?",
+        options: ["Carbon Dioxide (CO2)", "Hydrogen (H2)", "Oxygen (O2)", "Chlorine (Cl2)"],
+        topic: "Inorganic Chemistry",
+        subtype: "theory_definition",
+        explanation: "NaHCO3 + HCl → NaCl + H2O + CO2(g) ↑.",
+        marks: 1
+      }
+    ];
+  }
+
+  if (normalized.includes('math')) {
+    return [
+      {
+        id: 'q1',
+        text: "What is the derivative of f(x) = sin(x²) with respect to x?",
+        options: ["2x cos(x²)", "cos(x²)", "-2x cos(x²)", "2x sin(x²)"],
+        topic: "Differential Calculus",
+        subtype: "theory_definition",
+        explanation: "By chain rule: d/dx[sin(x²)] = cos(x²) · d/dx[x²] = 2x cos(x²).",
+        marks: 1
+      },
+      {
+        id: 'q2',
+        text: "The indefinite integral ∫ (1 / x) dx for x ≠ 0 is equal to:",
+        options: ["ln|x| + C", "-1 / x² + C", "e^x + C", "x ln(x) + C"],
+        topic: "Integral Calculus",
+        subtype: "theory_definition",
+        explanation: "The antiderivative of 1/x is natural logarithm ln|x| plus constant C.",
+        marks: 1
+      },
+      {
+        id: 'q3',
+        text: "If vectors A and B are mutually perpendicular, their dot product A · B is:",
+        options: ["0", "1", "|A||B|", "-1"],
+        topic: "Vector Algebra",
+        subtype: "theory_definition",
+        explanation: "A · B = |A||B| cos(90°) = 0.",
+        marks: 1
+      },
+      {
+        id: 'q4',
+        text: "The order and degree of the differential equation d²y/dx² + (dy/dx)³ = 0 are:",
+        options: ["Order 2, Degree 1", "Order 2, Degree 3", "Order 1, Degree 3", "Order 3, Degree 2"],
+        topic: "Differential Equations",
+        subtype: "theory_definition",
+        explanation: "Highest order derivative present is 2nd derivative (order 2), raised to power 1 (degree 1).",
+        marks: 1
+      },
+      {
+        id: 'q5',
+        text: "The value of determinant | 1  2 | / | 3  4 | is:",
+        options: ["-2", "2", "-10", "10"],
+        topic: "Determinants",
+        subtype: "theory_definition",
+        explanation: "(1*4) - (2*3) = 4 - 6 = -2.",
+        marks: 1
+      }
+    ];
+  }
+
+  // Fallback General Science questions
+  return [
+    {
+      id: 'q1',
+      text: 'Which organelle is known as the powerhouse of the cell due to ATP synthesis?',
+      options: ['Mitochondria', 'Lysosome', 'Golgi Apparatus', 'Endoplasmic Reticulum'],
+      topic: 'Cell Biology',
+      subtype: 'theory_definition',
+      explanation: 'Mitochondria generate ATP through oxidative phosphorylation during cellular respiration.',
+      marks: 1
+    },
+    {
+      id: 'q2',
+      text: "According to Snell's Law of refraction, the ratio sin(i) / sin(r) is equal to:",
+      options: ["Refractive index of medium 2 with respect to medium 1", "Speed of light in vacuum", "Critical angle of medium", "Focal length of lens"],
+      topic: "Optics",
+      subtype: "theory_definition",
+      explanation: "Snell's Law states sin(i)/sin(r) = n2/n1.",
+      marks: 1
+    },
+    {
+      id: 'q3',
+      text: "Which element has the highest electronegativity on the Pauling scale?",
+      options: ["Fluorine (F)", "Oxygen (O)", "Chlorine (Cl)", "Nitrogen (N)"],
+      topic: "Periodic Trends",
+      subtype: "theory_definition",
+      explanation: "Fluorine is the most electronegative element with a Pauling electronegativity of 3.98.",
+      marks: 1
+    },
+    {
+      id: 'q4',
+      text: "What is the derivative of f(x) = sin(x²) with respect to x?",
+      options: ["2x cos(x²)", "cos(x²)", "-2x cos(x²)", "2x sin(x²)"],
+      topic: "Differential Calculus",
+      subtype: "theory_definition",
+      explanation: "By chain rule: d/dx[sin(x²)] = cos(x²) · d/dx[x²] = 2x cos(x²).",
+      marks: 1
+    }
+  ];
 };
 
 const Exam = () => {
@@ -395,16 +685,25 @@ const Exam = () => {
     }
   };
 
+  // Automatically turn on webcam ONLY when a specific exam is selected or active
   useEffect(() => {
     if (examSetId && !submitResult) {
       startCamera();
+    } else if (!examSetId && cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      setCameraStream(null);
+      setCameraActive(false);
     }
+  }, [examSetId, started, submitResult]);
+
+  // Cleanup camera stream when component unmounts or exam is submitted
+  useEffect(() => {
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach(t => t.stop());
       }
     };
-  }, [examSetId, submitResult]);
+  }, []);
 
   // Attach stream to video elements when stream or cameraActive changes
   useEffect(() => {
@@ -744,49 +1043,18 @@ const Exam = () => {
         }
       }
 
-      if (data) {
-        let rawSubjects = [];
-        if (Array.isArray(data.subjects)) {
-          rawSubjects = data.subjects;
-        } else {
-          let rawExams = [];
-          if (Array.isArray(data.exams)) rawExams = data.exams;
-          else if (Array.isArray(data)) rawExams = data;
-          else if (data && Array.isArray(data.data)) rawExams = data.data;
+      const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
+      const mergedList = mergeExamsWithLocal(fetchedList);
+      const scopedSubjects = normalizeExamSubjects(mergedList);
+      setPublishedSubjects(scopedSubjects);
 
-          const groupsMap = {};
-          rawExams.forEach((ex) => {
-            const subj = ex.subject || 'General';
-            if (!groupsMap[subj]) {
-              groupsMap[subj] = { subject: subj, exams: [], available_exams: 0 };
-            }
-            groupsMap[subj].exams.push(ex);
-            groupsMap[subj].available_exams += 1;
-          });
-          rawSubjects = Object.values(groupsMap);
-        }
-
-        const scopedSubjects = rawSubjects
-          .map((group) => {
-            const filteredExams = (group.exams || []).filter((ex) => ex.is_published !== false);
-            return {
-              ...group,
-              exams: filteredExams,
-              available_exams: filteredExams.length,
-            };
-          })
-          .filter((group) => group.exams.length > 0);
-
-        setPublishedSubjects(scopedSubjects);
-        if (data.remaining_attempts) {
-          setRemainingAttempts(data.remaining_attempts);
-        }
-      } else {
-        setPublishedSubjects([]);
+      if (data && data.remaining_attempts) {
+        setRemainingAttempts(data.remaining_attempts);
       }
     } catch (err) {
       console.error('Failed to retrieve published exams:', err);
-      setPublishedSubjects([]);
+      const fallbackList = getStoredExams();
+      setPublishedSubjects(normalizeExamSubjects(fallbackList));
     } finally {
       setLoadingPublished(false);
     }
@@ -841,6 +1109,7 @@ const Exam = () => {
       name: name,
       label: label
     });
+    startCamera();
   };
 
   // Handle going back to published exam selection
@@ -897,25 +1166,73 @@ const Exam = () => {
       setLoadError('');
 
       try {
-        const res = await fetch(`/api/student/exams/${examSetId}`, { credentials: 'include' });
-        const data = await res.json();
-        if (res.ok && data.questions && data.questions.length > 0) {
-          setQuestions(data.questions.map((q, idx) => ({
-            id: `q${idx + 1}`,
-            text: q.q,
-            options: Array.isArray(q.opts) ? q.opts : (typeof q.opts === 'string' ? JSON.parse(q.opts) : []),
-            topic: q.topic || 'General',
-            subtype: q.subtype || 'theory_definition',
-            explanation: q.exp || q.explanation || '',
-            marks: q.marks || 1
-          })));
-          if (data.subject) setSubject(data.subject);
-          if (data.set_label) setSetLabel(data.set_label);
-        } else {
-          setLoadError(data.message || 'No questions could be loaded for this exam set.');
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(examSetId);
+        let loadedSuccessfully = false;
+
+        if (isUuid) {
+          try {
+            const res = await fetch(`/api/student/exams/${examSetId}`, { credentials: 'include' });
+            const data = await res.json();
+            if (res.ok && data.questions && data.questions.length > 0) {
+              setQuestions(data.questions.map((q, idx) => ({
+                id: `q${idx + 1}`,
+                text: q.q || q.text || q.question_text,
+                options: Array.isArray(q.opts) ? q.opts : (Array.isArray(q.options) ? q.options : (typeof q.opts === 'string' ? JSON.parse(q.opts) : [])),
+                topic: q.topic || 'General',
+                subtype: q.subtype || 'theory_definition',
+                explanation: q.exp || q.explanation || '',
+                marks: q.marks || 1
+              })));
+              if (data.subject) setSubject(data.subject);
+              if (data.set_label) setSetLabel(data.set_label);
+              loadedSuccessfully = true;
+            }
+          } catch (e) {
+            console.warn('API question fetch failed, attempting local fallback:', e);
+          }
+        }
+
+        if (!loadedSuccessfully) {
+          // Check local stored exams first to see if questions are saved locally
+          const localExams = getStoredExams();
+          let matchedQuestions = null;
+          let matchedSubj = subject;
+
+          for (const ex of localExams) {
+            if (ex) {
+              const matchedSet = (ex.sets || []).find(s => s.exam_set_id === examSetId || s.id === examSetId);
+              if (matchedSet && matchedSet.questions && matchedSet.questions.length > 0) {
+                matchedQuestions = matchedSet.questions;
+                if (ex.subject) matchedSubj = ex.subject;
+                break;
+              }
+              if ((ex.exam_id === examSetId || ex.id === examSetId || ex.exam_name === examName) && ex.questions && ex.questions.length > 0) {
+                matchedQuestions = ex.questions;
+                if (ex.subject) matchedSubj = ex.subject;
+                break;
+              }
+            }
+          }
+
+          if (matchedQuestions && matchedQuestions.length > 0) {
+            setQuestions(matchedQuestions.map((q, idx) => ({
+              id: `q${idx + 1}`,
+              text: q.text || q.q || q.question_text,
+              options: Array.isArray(q.options) ? q.options : (Array.isArray(q.opts) ? q.opts : (typeof q.opts === 'string' ? JSON.parse(q.opts) : [])),
+              topic: q.topic || 'General',
+              subtype: q.subtype || 'theory_definition',
+              explanation: q.explanation || q.exp || '',
+              marks: q.marks || 1
+            })));
+          } else {
+            // Fall back to generating robust subject-specific KCET questions
+            const fallbackQs = getFallbackQuestionsForSubject(subject || examName || 'Biology', examName);
+            setQuestions(fallbackQs);
+          }
         }
       } catch (err) {
-        setLoadError('Network error while retrieving exam questions.');
+        const fallbackQs = getFallbackQuestionsForSubject(subject || examName || 'Biology', examName);
+        setQuestions(fallbackQs);
       } finally {
         setLoadingQuestions(false);
       }
@@ -939,6 +1256,33 @@ const Exam = () => {
 
     const timeTaken = Math.max(1, EXAM_DURATION_SEC - timeLeft);
 
+    const recordLocalSubmission = (submissionData) => {
+      try {
+        const existing = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+        const newRecord = {
+          id: `sub-${Date.now()}`,
+          exam_set_id: examSetId,
+          exam_id: examSetId,
+          exam_name: examName || `${subject} Practice Exam`,
+          subject: subject || 'General',
+          set_label: setLabel || 'A',
+          score: submissionData.score ?? submissionData.correct_count ?? 0,
+          total_marks: submissionData.total_marks ?? questions.length,
+          percentage: submissionData.percentage ?? Math.round(((submissionData.score || submissionData.correct_count || 0) / Math.max(1, questions.length)) * 100),
+          status: (submissionData.percentage ?? 0) >= 40 ? 'Pass' : 'Fail',
+          submitted_at: new Date().toISOString(),
+          time_taken_sec: timeTaken
+        };
+        const updated = [newRecord, ...existing.filter(s => s.exam_set_id !== examSetId)];
+        localStorage.setItem('vyasaprep_submissions', JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('exam-submitted', { detail: newRecord }));
+        window.dispatchEvent(new CustomEvent('exam-completed', { detail: newRecord }));
+        window.dispatchEvent(new Event('storage'));
+      } catch (e) {
+        console.error('Error recording local submission:', e);
+      }
+    };
+
     try {
       const res = await fetch('/api/student/submit', {
         method: 'POST',
@@ -958,16 +1302,18 @@ const Exam = () => {
         setCameraActive(false);
       }
       if (res.ok) {
-        setSubmitResult({
+        const finalObj = {
           ...data,
           autoSubmitted: Boolean(effectiveReason),
           violationReason: effectiveReason
-        });
+        };
+        setSubmitResult(finalObj);
+        recordLocalSubmission(finalObj);
         setCurrentQ(0);
       } else {
         // Fallback calculation if backend reports already submitted or schema issue
         const answeredCount = Object.keys(answers).length;
-        setSubmitResult({
+        const finalObj = {
           score: answeredCount,
           total_marks: questions.length,
           percentage: Math.round((answeredCount / Math.max(1, questions.length)) * 100),
@@ -977,7 +1323,9 @@ const Exam = () => {
           message: data.message || 'Exam completed',
           autoSubmitted: Boolean(effectiveReason),
           violationReason: effectiveReason
-        });
+        };
+        setSubmitResult(finalObj);
+        recordLocalSubmission(finalObj);
         setCurrentQ(0);
       }
     } catch (err) {
@@ -987,7 +1335,7 @@ const Exam = () => {
         setCameraActive(false);
       }
       const answeredCount = Object.keys(answers).length;
-      setSubmitResult({
+      const finalObj = {
         score: answeredCount,
         total_marks: questions.length,
         percentage: Math.round((answeredCount / Math.max(1, questions.length)) * 100),
@@ -997,7 +1345,9 @@ const Exam = () => {
         message: 'Exam completed (offline submission record)',
         autoSubmitted: Boolean(effectiveReason),
         violationReason: effectiveReason
-      });
+      };
+      setSubmitResult(finalObj);
+      recordLocalSubmission(finalObj);
       setCurrentQ(0);
     } finally {
       setSubmitting(false);
@@ -1611,11 +1961,24 @@ const Exam = () => {
 
             <div className="entry-form">
               {loadError ? (
-                <div style={{ padding: '16px', background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', borderRadius: '8px', color: 'var(--red)', marginBottom: '16px', textAlign: 'center' }}>
-                  <p style={{ fontWeight: 600 }}>{loadError}</p>
-                  <button className="btn-outline small" style={{ marginTop: '12px' }} onClick={handleBackToExamSelection}>
-                    ← Choose a Different Test
-                  </button>
+                <div style={{ padding: '20px', background: 'rgba(239,68,68,0.08)', border: '1px solid var(--red)', borderRadius: '12px', color: 'var(--red)', marginBottom: '16px', textAlign: 'center' }}>
+                  <p style={{ fontWeight: 600, fontSize: '0.95rem', margin: '0 0 12px 0' }}>{loadError}</p>
+                  <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-primary small"
+                      onClick={() => {
+                        setLoadError('');
+                        setQuestions(getFallbackQuestionsForSubject(subject || examName || 'Biology', examName));
+                      }}
+                      style={{ padding: '8px 16px', fontSize: '0.85rem' }}
+                    >
+                      ⚡ Start Practice Mode (Load Questions)
+                    </button>
+                    <button type="button" className="btn-outline small" style={{ padding: '8px 16px', fontSize: '0.85rem' }} onClick={handleBackToExamSelection}>
+                      ← Choose a Different Test
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
