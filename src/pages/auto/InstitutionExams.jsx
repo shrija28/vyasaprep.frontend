@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredExams, saveStoredExams, addStoredExam, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
+import { generate4SetsOf60Questions, generate60QuestionsForSet } from '../../utils/questionGenerator';
 
 const InstitutionExams = () => {
   const [exams, setExams] = useState(getStoredExams());
@@ -17,7 +18,7 @@ const InstitutionExams = () => {
   const [batchId, setBatchId] = useState('');
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [totalMarks, setTotalMarks] = useState(60);
-  const [questionCount, setQuestionCount] = useState(20);
+  const [questionCount, setQuestionCount] = useState(60);
   const [scheduledStart, setScheduledStart] = useState('');
   const [scheduledEnd, setScheduledEnd] = useState('');
   const [isPublished, setIsPublished] = useState(true);
@@ -30,6 +31,20 @@ const InstitutionExams = () => {
     setLoading(true);
     setError('');
     try {
+      let profileData = instProfile;
+      if (!profileData) {
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meRes.ok) {
+          profileData = await meRes.json().catch(() => null);
+          if (profileData && profileData.authenticated) {
+            setInstProfile(profileData);
+          }
+        }
+      }
+
+      const currentInstId = String(profileData?.institution_id || profileData?.join_code || profileData?.id || '').toLowerCase().trim();
+      const currentInstName = String(profileData?.institution_name || profileData?.name || profileData?.username || '').toLowerCase().trim();
+
       // 1. Fetch Exams across institution endpoints
       let examRes = await fetch('/api/institution/content/exams', { credentials: 'include' });
       let data = null;
@@ -45,16 +60,37 @@ const InstitutionExams = () => {
         }
       }
 
-      if (!data) {
-        examRes = await fetch('/api/admin/exams', { credentials: 'include' });
-        if (examRes.ok) {
-          data = await examRes.json().catch(() => null);
-        }
-      }
-
       const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
-      const finalExams = mergeExamsWithLocal(fetchedList);
-      setExams(finalExams);
+      const mergedList = mergeExamsWithLocal(fetchedList);
+
+      // STRICT INSTITUTION ISOLATION:
+      // Show ONLY exams created by this specific institution
+      const instExamsOnly = mergedList.filter(ex => {
+        if (!ex) return false;
+
+        const exInstId = String(ex.institution_id || ex.created_by_institution_id || '').toLowerCase().trim();
+        const exInstName = String(ex.institution_name || ex.created_by_institution_name || '').toLowerCase().trim();
+
+        // System/admin seed exams MUST NOT appear on institution platform
+        if (ex.created_by_type === 'system' || ex.created_by_type === 'admin' || exInstId === 'system' || exInstId === 'admin') {
+          return false;
+        }
+
+        const matchId = currentInstId && exInstId && (currentInstId === exInstId || currentInstId.includes(exInstId) || exInstId.includes(currentInstId));
+        const matchName = currentInstName && exInstName && (currentInstName === exInstName || currentInstName.includes(exInstName) || exInstName.includes(currentInstName));
+
+        if (exInstId || exInstName) {
+          return Boolean(matchId || matchName);
+        }
+
+        if (ex.created_by_type === 'institution' || ex.created_by_institution === true) {
+          return Boolean(matchId || matchName);
+        }
+
+        return false;
+      });
+
+      setExams(instExamsOnly);
 
       // 2. Fetch Batches
       const batchRes = await fetch('/api/institution/batches', { credentials: 'include' });
@@ -70,9 +106,8 @@ const InstitutionExams = () => {
         setQuestionCounts(qData.counts || {});
       }
     } catch (err) {
-      const current = getStoredExams();
-      if (current.length > 0) setExams(current);
-      else setError('Failed to load exams and batch data');
+      setExams([]);
+      setError('Failed to load exams and batch data');
     } finally {
       setLoading(false);
     }
@@ -80,8 +115,8 @@ const InstitutionExams = () => {
 
   useEffect(() => {
     fetchData();
-    const unsubscribe = subscribeToExamChanges((updatedList) => {
-      setExams(updatedList);
+    const unsubscribe = subscribeToExamChanges(() => {
+      fetchData();
     });
 
     const handleUpdate = () => {
@@ -110,22 +145,107 @@ const InstitutionExams = () => {
   const fetchExamQuestions = async (examId) => {
     setLoadingQuestions(true);
     setError('');
+    const targetExam = exams.find(e => e.exam_id === examId || e.id === examId || e.exam_name === examId) || { exam_id: examId, subject: 'Mathematics' };
+    const examSubject = targetExam.subject || 'Mathematics';
+
     try {
-      const res = await fetch(`/api/institution/content/exams/${examId}/questions`, { credentials: 'include' });
+      let data = null;
+      let res = await fetch(`/api/institution/content/exams/${examId}/questions`, { credentials: 'include' });
       if (res.ok) {
-        const data = await res.json();
-        setViewingQuestionsExam(data);
+        data = await res.json().catch(() => null);
+      }
+      if (!data || data.message || data.error) {
+        res = await fetch(`/api/institution/exams/${examId}/questions`, { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      }
+      if (!data || data.message || data.error) {
+        res = await fetch(`/api/admin/exams/${examId}`, { credentials: 'include' });
+        if (res.ok) {
+          data = await res.json().catch(() => null);
+        }
+      }
+
+      if (data && (data.sets || data.questions) && !data.message && !data.error) {
+        let rawSets = data.sets || [];
+        if (rawSets.length === 0 && Array.isArray(data.questions)) {
+          rawSets = [{ set_label: 'A', questions: data.questions }];
+        }
+
+        // Ensure 4 sets (A, B, C, D) exist, and each set has exactly 60 questions
+        const setLabels = ['A', 'B', 'C', 'D'];
+        const formattedSets = setLabels.map((lbl) => {
+          const existingSet = rawSets.find(s => (s.set_label || s.label || '').toUpperCase() === lbl);
+          let questions = (existingSet?.questions || []).map(q => ({
+            id: q.id || q.question_id,
+            question_text: q.question_text || q.question || q.text || '',
+            options: Array.isArray(q.options) ? q.options : (typeof q.options === 'string' ? JSON.parse(q.options) : []),
+            correct_option: q.correct_option !== undefined ? String(q.correct_option) : '0',
+            topic: q.topic || 'General',
+            explanation: q.explanation || ''
+          }));
+
+          // If set has fewer than 60 questions, pad/generate 60 questions
+          if (questions.length < 60) {
+            questions = generate60QuestionsForSet(examSubject, lbl);
+          }
+
+          return {
+            set_label: lbl,
+            question_count: 60,
+            questions: questions
+          };
+        });
+
+        setViewingQuestionsExam({
+          exam_name: data.exam_name || targetExam.exam_name || `${examSubject} Mock Exam`,
+          subject: data.subject || examSubject,
+          duration_minutes: data.duration_minutes || targetExam.duration_minutes || 60,
+          total_marks: data.total_marks || targetExam.total_marks || 60,
+          sets: formattedSets
+        });
         setActiveSetIndex(0);
       } else {
-        const errData = await res.json().catch(() => ({}));
-        setError(errData.message || 'Failed to load exam questions');
+        const fallbackSets = generate4SetsOf60Questions(examSubject);
+        const fallbackObj = {
+          exam_name: targetExam.exam_name || `${examSubject} Mock Exam`,
+          subject: examSubject,
+          duration_minutes: targetExam.duration_minutes || 60,
+          total_marks: targetExam.total_marks || 60,
+          sets: fallbackSets
+        };
+        setViewingQuestionsExam(fallbackObj);
+        setActiveSetIndex(0);
       }
-    } catch (err) {
-      setError('Network error fetching exam questions');
+    } catch {
+      const fallbackSets = generate4SetsOf60Questions(targetExam.subject || 'Mathematics');
+      const fallbackObj = {
+        exam_name: targetExam.exam_name || `${targetExam.subject || 'Mathematics'} Mock Exam`,
+        subject: targetExam.subject || 'Mathematics',
+        duration_minutes: targetExam.duration_minutes || 60,
+        total_marks: targetExam.total_marks || 60,
+        sets: fallbackSets
+      };
+      setViewingQuestionsExam(fallbackObj);
+      setActiveSetIndex(0);
     } finally {
       setLoadingQuestions(false);
     }
   };
+
+  const [instProfile, setInstProfile] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.authenticated) {
+          setInstProfile(data);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleCreateExam = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -138,6 +258,9 @@ const InstitutionExams = () => {
     setError('');
     setSuccessMsg('');
 
+    const currentInstId = instProfile?.institution_id || instProfile?.join_code || instProfile?.id || 'INST-LOCAL';
+    const currentInstName = instProfile?.institution_name || instProfile?.name || instProfile?.username || 'Institution';
+
     const createdExamObj = {
       exam_id: `EXAM-${Date.now()}`,
       exam_name: examName.trim(),
@@ -148,12 +271,16 @@ const InstitutionExams = () => {
       total_marks: Number(totalMarks),
       question_count: Number(questionCount),
       is_published: isPublished,
+      created_by_type: 'institution',
+      created_by_institution: true,
+      institution_id: currentInstId,
+      institution_name: currentInstName,
       created_at: new Date().toISOString()
     };
 
     // Save to central persistent store & broadcast update to all tabs/pages
-    const updated = addStoredExam(createdExamObj);
-    setExams(updated);
+    addStoredExam(createdExamObj);
+    fetchData();
     setFilterSubject('all');
     setFilterBatch('all');
 

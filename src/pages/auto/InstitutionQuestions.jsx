@@ -12,29 +12,100 @@ const InstitutionQuestions = () => {
   const [error, setError] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [instProfile, setInstProfile] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+
+  const fetchProfile = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      if (res.ok) {
+        const p = await res.json();
+        if (p && p.authenticated) setInstProfile(p);
+      }
+    } catch (e) {}
+  }, []);
 
   const fetchCounts = useCallback(async () => {
     try {
-      let res = await fetch('/api/institution/content/questions/counts', { credentials: 'include' });
-      if (!res.ok) {
-        res = await fetch('/api/institution/questions/counts', { credentials: 'include' });
+      let profileData = instProfile;
+      if (!profileData) {
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meRes.ok) {
+          profileData = await meRes.json().catch(() => null);
+          if (profileData && profileData.authenticated) setInstProfile(profileData);
+        }
       }
+
+      const currentInstId = String(profileData?.institution_id || profileData?.join_code || profileData?.id || '').toLowerCase().trim();
+      const currentInstName = String(profileData?.institution_name || profileData?.name || profileData?.username || '').toLowerCase().trim();
+
+      // Fetch questions to compute institution-specific private question counts
+      let res = await fetch('/api/institution/content/questions?page_size=1000', { credentials: 'include' });
+      if (!res.ok) {
+        res = await fetch('/api/institution/questions?page_size=1000', { credentials: 'include' });
+      }
+
       if (res.ok) {
         const data = await res.json();
-        if (data.counts || data.counts_by_subject) {
-          setCounts(data.counts || data.counts_by_subject);
+        let fetchedList = [];
+        if (Array.isArray(data)) {
+          fetchedList = data;
+        } else if (data && typeof data === 'object') {
+          fetchedList = data.questions || data.items || data.mcqs || data.results || data.data || [];
         }
+
+        // STRICT INSTITUTION ISOLATION FOR COUNTS:
+        const instQuestions = fetchedList.filter(q => {
+          if (!q) return false;
+          const qInstId = String(q.institution_id || q.created_by_institution_id || q.inst_id || '').toLowerCase().trim();
+          const qInstName = String(q.institution_name || q.created_by_institution_name || q.inst_name || '').toLowerCase().trim();
+
+          const matchId = currentInstId && qInstId && (currentInstId === qInstId || currentInstId.includes(qInstId) || qInstId.includes(currentInstId));
+          const matchName = currentInstName && qInstName && (currentInstName === qInstName || currentInstName.includes(qInstName) || qInstName.includes(currentInstName));
+
+          if (qInstId || qInstName) {
+            return Boolean(matchId || matchName);
+          }
+
+          if (q.created_by_type === 'institution' || q.created_by_institution === true) {
+            return Boolean(matchId || matchName);
+          }
+
+          return false; // Exclude non-institution system questions from institution count
+        });
+
+        const subjectCounts = { Biology: 0, Physics: 0, Chemistry: 0, Mathematics: 0 };
+        instQuestions.forEach(q => {
+          const s = String(q.subject || q.subject_name || q.category || '').trim();
+          const foundKey = Object.keys(subjectCounts).find(k => k.toLowerCase() === s.toLowerCase());
+          if (foundKey) {
+            subjectCounts[foundKey]++;
+          }
+        });
+
+        setCounts(subjectCounts);
       }
     } catch (err) {
       console.error('Failed to fetch institution question counts:', err);
     }
-  }, []);
+  }, [instProfile]);
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
+      let profileData = instProfile;
+      if (!profileData) {
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meRes.ok) {
+          profileData = await meRes.json().catch(() => null);
+          if (profileData && profileData.authenticated) setInstProfile(profileData);
+        }
+      }
+
+      const currentInstId = String(profileData?.institution_id || profileData?.join_code || profileData?.id || '').toLowerCase().trim();
+      const currentInstName = String(profileData?.institution_name || profileData?.name || profileData?.username || '').toLowerCase().trim();
+
       const params = new URLSearchParams({
         page: String(currentPage),
         page_size: String(pageSize),
@@ -56,12 +127,30 @@ const InstitutionQuestions = () => {
           fetchedList = data.questions || data.items || data.mcqs || data.results || data.data || [];
         }
 
-        setQuestions(fetchedList);
-        setTotalQuestions(data.total || data.total_questions || data.count || fetchedList.length || 0);
+        // STRICT INSTITUTION QUESTION ISOLATION:
+        const filteredList = fetchedList.filter(q => {
+          if (!q) return false;
+          const qInstId = String(q.institution_id || q.created_by_institution_id || q.inst_id || '').toLowerCase().trim();
+          const qInstName = String(q.institution_name || q.created_by_institution_name || q.inst_name || '').toLowerCase().trim();
 
-        if (data.counts || data.counts_by_subject) {
-          setCounts(data.counts || data.counts_by_subject);
-        }
+          const matchId = currentInstId && qInstId && (currentInstId === qInstId || currentInstId.includes(qInstId) || qInstId.includes(currentInstId));
+          const matchName = currentInstName && qInstName && (currentInstName === qInstName || currentInstName.includes(qInstName) || qInstName.includes(currentInstName));
+
+          if (qInstId || qInstName) {
+            return Boolean(matchId || matchName);
+          }
+
+          if (q.created_by_type === 'institution' || q.created_by_institution === true) {
+            return Boolean(matchId || matchName);
+          }
+
+          return false;
+        });
+
+        setQuestions(filteredList);
+
+        const totalInstCount = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
+        setTotalQuestions(filterSubject ? (counts[filterSubject] || filteredList.length) : (totalInstCount || filteredList.length));
       } else {
         setQuestions([]);
         setTotalQuestions(0);
@@ -72,11 +161,12 @@ const InstitutionQuestions = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, filterSubject]);
+  }, [currentPage, pageSize, filterSubject, instProfile, counts]);
 
   useEffect(() => {
+    fetchProfile();
     fetchCounts();
-  }, [fetchCounts]);
+  }, [fetchProfile, fetchCounts]);
 
   useEffect(() => {
     fetchQuestions();

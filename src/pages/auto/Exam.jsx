@@ -452,6 +452,27 @@ const getFallbackQuestionsForSubject = (subj = 'Biology', examTitle = '') => {
   ];
 };
 
+const checkExamSubmitted = (setOrExamId, examTitle, examSubj, studentId = '') => {
+  try {
+    const activeStudentId = studentId || localStorage.getItem('vyasaprep_active_student_id') || '';
+    if (!activeStudentId || activeStudentId === 'Loading...') {
+      return null;
+    }
+    const subs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+    return subs.find(s => 
+      s &&
+      s.student_id &&
+      String(s.student_id).toLowerCase().trim() === String(activeStudentId).toLowerCase().trim() &&
+      (
+        (setOrExamId && (s.exam_set_id === setOrExamId || s.exam_id === setOrExamId)) ||
+        (examTitle && s.exam_name && String(s.exam_name).toLowerCase().trim() === String(examTitle).toLowerCase().trim() && (!examSubj || String(s.subject).toLowerCase().trim() === String(examSubj).toLowerCase().trim()))
+      )
+    );
+  } catch (e) {
+    return null;
+  }
+};
+
 const Exam = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -460,6 +481,9 @@ const Exam = () => {
   const [subject, setSubject] = useState(searchParams.get('subject') || 'General');
   const [examName, setExamName] = useState(searchParams.get('name') || 'KCET Exam');
   const [setLabel, setSetLabel] = useState(searchParams.get('label') || 'A');
+
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  const [completedSubmission, setCompletedSubmission] = useState(null);
 
   // Published exams state for test selection
   const [publishedSubjects, setPublishedSubjects] = useState([]);
@@ -1006,13 +1030,30 @@ const Exam = () => {
     };
   }, [started, submitResult]);
 
-  // Synchronize state with URL search params
+  // Synchronize state with URL search params & verify attempt limits
   useEffect(() => {
     const currentSet = searchParams.get('set') || '';
+    const currentSubj = searchParams.get('subject') || '';
+    const currentName = searchParams.get('name') || '';
+
     setExamSetId(currentSet);
-    if (searchParams.get('subject')) setSubject(searchParams.get('subject'));
-    if (searchParams.get('name')) setExamName(searchParams.get('name'));
+    if (currentSubj) setSubject(currentSubj);
+    if (currentName) setExamName(currentName);
     if (searchParams.get('label')) setSetLabel(searchParams.get('label'));
+
+    if (currentSet || currentName) {
+      const completedRecord = checkExamSubmitted(currentSet, currentName, currentSubj);
+      if (completedRecord) {
+        setAlreadyCompleted(true);
+        setCompletedSubmission(completedRecord);
+      } else {
+        setAlreadyCompleted(false);
+        setCompletedSubmission(null);
+      }
+    } else {
+      setAlreadyCompleted(false);
+      setCompletedSubmission(null);
+    }
   }, [searchParams]);
 
   // Fetch published exams when no exam is currently chosen
@@ -1021,6 +1062,31 @@ const Exam = () => {
     setPublishedError('');
     try {
       let data = null;
+
+      // Ensure student profile is loaded for affiliation checking
+      let student = studentDetails;
+      if (!student || !student.id || student.id === 'Loading...') {
+        try {
+          const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData.authenticated) {
+              const stdId = generateStudentId(meData);
+              student = {
+                name: meData.display_name || meData.sub || 'Student',
+                id: stdId,
+                institutionName: meData.institution_name || meData.institution_code || (meData.student_subtype === 'institutional' ? (meData.join_code || 'Institution Member') : null),
+                institution_id: meData.institution_id || meData.join_code,
+                student_subtype: meData.student_subtype
+              };
+              setStudentDetails(student);
+              localStorage.setItem('vyasaprep_active_student_id', stdId);
+            }
+          }
+        } catch (e) {}
+      } else if (student.id) {
+        localStorage.setItem('vyasaprep_active_student_id', student.id);
+      }
 
       // 1. Try primary student exams endpoint
       let res = await fetch('/api/student/exams', { credentials: 'include' });
@@ -1074,7 +1140,45 @@ const Exam = () => {
       }
 
       const mergedList = mergeExamsWithLocal(fetchedList);
-      const scopedSubjects = normalizeExamSubjects(mergedList);
+
+      // --- STRICT INSTITUTION EXAM VISIBILITY RULES ---
+      const isInstitutionalStudent = Boolean(
+        (student?.institutionName && !String(student.institutionName).toLowerCase().includes('guest')) ||
+        student?.institution_id ||
+        student?.student_subtype === 'institutional'
+      );
+      const studentInstName = String(student?.institutionName || student?.institution_name || '').toLowerCase().trim();
+      const studentInstId = String(student?.institution_id || student?.join_code || '').toLowerCase().trim();
+
+      const filteredList = mergedList.filter(ex => {
+        if (!ex) return false;
+
+        const isInstitutionCreated = Boolean(
+          ex.created_by_type === 'institution' ||
+          ex.created_by_institution === true ||
+          (ex.institution_id && ex.institution_id !== 'admin' && ex.institution_id !== 'system') ||
+          (ex.institution_name && !String(ex.institution_name).toLowerCase().includes('admin') && !String(ex.institution_name).toLowerCase().includes('system'))
+        );
+
+        if (isInstitutionCreated) {
+          // Rule 1: Exams created by an institution MUST NOT be visible to regular/independent students!
+          if (!isInstitutionalStudent) return false;
+
+          // Rule 2: Exams created by Institution A should ONLY be visible to students of Institution A!
+          const exInstId = String(ex.institution_id || '').toLowerCase().trim();
+          const exInstName = String(ex.institution_name || '').toLowerCase().trim();
+
+          const matchId = studentInstId && exInstId && (studentInstId === exInstId || studentInstId.includes(exInstId) || exInstId.includes(studentInstId));
+          const matchName = studentInstName && exInstName && (studentInstName === exInstName || studentInstName.includes(exInstName) || exInstName.includes(studentInstName));
+
+          return Boolean(matchId || matchName || (!exInstId && !exInstName));
+        }
+
+        // Public platform practice exams created by system/admin are visible to all students
+        return true;
+      });
+
+      const scopedSubjects = normalizeExamSubjects(filteredList);
       setPublishedSubjects(scopedSubjects);
 
       if (data && data.remaining_attempts) {
@@ -1141,6 +1245,19 @@ const Exam = () => {
     const name = exam.exam_name || `${subj} Mock Exam`;
     const label = setObj.set_label || 'A';
 
+    // Strict 1 attempt restriction check
+    const completedRecord = checkExamSubmitted(setId, name, subj);
+    if (completedRecord) {
+      setAlreadyCompleted(true);
+      setCompletedSubmission(completedRecord);
+      setExamSetId(setId);
+      setSubject(subj);
+      setExamName(name);
+      setSetLabel(label);
+      setSearchParams({ set: setId, subject: subj, name: name, label: label });
+      return;
+    }
+
     setExamSetId(setId);
     setSubject(subj);
     setExamName(name);
@@ -1164,6 +1281,8 @@ const Exam = () => {
     setExamSetId('');
     setQuestions([]);
     setStarted(false);
+    setAlreadyCompleted(false);
+    setCompletedSubmission(null);
     setSubmitResult(null);
     setShowAiModal(false);
     setAnswers({});
@@ -1196,9 +1315,9 @@ const Exam = () => {
     return list;
   }, [publishedSubjects, selectedSubjectFilter, searchQuery]);
 
-  // Fetch questions once a specific exam set is selected
+  // Fetch questions once a specific exam set is selected (unless already completed)
   useEffect(() => {
-    if (!examSetId) {
+    if (!examSetId || alreadyCompleted) {
       setLoadingQuestions(false);
       return;
     }
@@ -1290,6 +1409,40 @@ const Exam = () => {
 
     const effectiveReason = violationReason || autoSubmittedReason || '';
 
+    // Calculate exact evaluation metrics across all questions
+    let exactCorrect = 0;
+    let exactIncorrect = 0;
+    let exactUnanswered = 0;
+
+    questions.forEach((q, idx) => {
+      const studentAns = answers[idx];
+      if (studentAns === undefined || studentAns === null) {
+        exactUnanswered++;
+      } else {
+        let correctIdx = 0;
+        if (q.correct_option !== undefined && q.correct_option !== null) {
+          const cStr = String(q.correct_option).trim();
+          if (/^\d+$/.test(cStr)) {
+            correctIdx = parseInt(cStr, 10);
+          } else {
+            const upper = cStr.toUpperCase();
+            if (upper === 'A') correctIdx = 0;
+            else if (upper === 'B') correctIdx = 1;
+            else if (upper === 'C') correctIdx = 2;
+            else if (upper === 'D') correctIdx = 3;
+          }
+        }
+        if (Number(studentAns) === correctIdx) {
+          exactCorrect++;
+        } else {
+          exactIncorrect++;
+        }
+      }
+    });
+
+    const totalQCount = questions.length || 60;
+    const exactPercentage = Math.round((exactCorrect / Math.max(1, totalQCount)) * 100);
+
     // Format answers map for backend: { "0": "1", "1": "3", ... }
     const formattedAnswers = {};
     Object.keys(answers).forEach(qIdx => {
@@ -1301,21 +1454,28 @@ const Exam = () => {
     const recordLocalSubmission = (submissionData) => {
       try {
         const existing = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+        const activeStudentId = studentDetails?.id || localStorage.getItem('vyasaprep_active_student_id') || 'STD-001';
         const newRecord = {
           id: `sub-${Date.now()}`,
+          student_id: activeStudentId,
+          student_name: studentDetails?.name || 'Student',
+          institution_id: studentDetails?.institution_id || '',
           exam_set_id: examSetId,
           exam_id: examSetId,
           exam_name: examName || `${subject} Practice Exam`,
           subject: subject || 'General',
           set_label: setLabel || 'A',
-          score: submissionData.score ?? submissionData.correct_count ?? 0,
-          total_marks: submissionData.total_marks ?? questions.length,
-          percentage: submissionData.percentage ?? Math.round(((submissionData.score || submissionData.correct_count || 0) / Math.max(1, questions.length)) * 100),
-          status: (submissionData.percentage ?? 0) >= 40 ? 'Pass' : 'Fail',
+          score: submissionData.score ?? exactCorrect,
+          total_marks: submissionData.total_marks ?? totalQCount,
+          correct_count: submissionData.correct_count ?? exactCorrect,
+          incorrect_count: submissionData.incorrect_count ?? exactIncorrect,
+          unanswered_count: submissionData.unanswered_count ?? exactUnanswered,
+          percentage: submissionData.percentage ?? exactPercentage,
+          status: (submissionData.percentage ?? exactPercentage) >= 40 ? 'Pass' : 'Fail',
           submitted_at: new Date().toISOString(),
           time_taken_sec: timeTaken
         };
-        const updated = [newRecord, ...existing.filter(s => s.exam_set_id !== examSetId)];
+        const updated = [newRecord, ...existing.filter(s => !( (s.student_id ? s.student_id === activeStudentId : true) && (s.exam_set_id === examSetId || s.exam_name === newRecord.exam_name) ))];
         localStorage.setItem('vyasaprep_submissions', JSON.stringify(updated));
         window.dispatchEvent(new CustomEvent('exam-submitted', { detail: newRecord }));
         window.dispatchEvent(new CustomEvent('exam-completed', { detail: newRecord }));
@@ -1346,6 +1506,12 @@ const Exam = () => {
       if (res.ok) {
         const finalObj = {
           ...data,
+          score: exactCorrect,
+          total_marks: totalQCount,
+          correct_count: exactCorrect,
+          incorrect_count: exactIncorrect,
+          unanswered_count: exactUnanswered,
+          percentage: exactPercentage,
           autoSubmitted: Boolean(effectiveReason),
           violationReason: effectiveReason
         };
@@ -1353,16 +1519,14 @@ const Exam = () => {
         recordLocalSubmission(finalObj);
         setCurrentQ(0);
       } else {
-        // Fallback calculation if backend reports already submitted or schema issue
-        const answeredCount = Object.keys(answers).length;
         const finalObj = {
-          score: answeredCount,
-          total_marks: questions.length,
-          percentage: Math.round((answeredCount / Math.max(1, questions.length)) * 100),
-          correct_count: answeredCount,
-          incorrect_count: 0,
-          unanswered_count: questions.length - answeredCount,
-          message: data.message || 'Exam completed',
+          score: exactCorrect,
+          total_marks: totalQCount,
+          percentage: exactPercentage,
+          correct_count: exactCorrect,
+          incorrect_count: exactIncorrect,
+          unanswered_count: exactUnanswered,
+          message: data.message || 'Exam evaluated successfully',
           autoSubmitted: Boolean(effectiveReason),
           violationReason: effectiveReason
         };
@@ -1376,15 +1540,14 @@ const Exam = () => {
         setCameraStream(null);
         setCameraActive(false);
       }
-      const answeredCount = Object.keys(answers).length;
       const finalObj = {
-        score: answeredCount,
-        total_marks: questions.length,
-        percentage: Math.round((answeredCount / Math.max(1, questions.length)) * 100),
-        correct_count: answeredCount,
-        incorrect_count: 0,
-        unanswered_count: questions.length - answeredCount,
-        message: 'Exam completed (offline submission record)',
+        score: exactCorrect,
+        total_marks: totalQCount,
+        percentage: exactPercentage,
+        correct_count: exactCorrect,
+        incorrect_count: exactIncorrect,
+        unanswered_count: exactUnanswered,
+        message: 'Exam evaluated successfully',
         autoSubmitted: Boolean(effectiveReason),
         violationReason: effectiveReason
       };
@@ -1765,6 +1928,8 @@ const Exam = () => {
               {filteredExamsList.map(({ exam, subjGroup }) => {
                 const defaultSet = getAssignedSetForStudent(exam.sets, studentDetails.id);
                 const subjectName = subjGroup.subject || 'General';
+                const completedRecord = checkExamSubmitted(defaultSet?.exam_set_id || exam.exam_id, exam.exam_name, subjectName);
+                const isCompleted = Boolean(completedRecord);
 
                 const badgeColor = subjectName === 'Biology'
                   ? { bg: 'rgba(5,150,105,0.12)', text: '#059669', border: 'rgba(5,150,105,0.3)' }
@@ -1779,7 +1944,7 @@ const Exam = () => {
                     key={exam.exam_id}
                     style={{
                       background: 'var(--s1)',
-                      border: '1px solid var(--border)',
+                      border: isCompleted ? '1px solid rgba(16,185,129,0.35)' : '1px solid var(--border)',
                       borderRadius: '16px',
                       padding: '22px',
                       display: 'flex',
@@ -1792,18 +1957,33 @@ const Exam = () => {
                   >
                     <div>
                       {/* Card Header: Subject Tag & Duration */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <span style={{
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.78rem',
-                          fontWeight: 700,
-                          background: badgeColor.bg,
-                          color: badgeColor.text,
-                          border: `1px solid ${badgeColor.border}`
-                        }}>
-                          {subjectName}
-                        </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            padding: '4px 10px',
+                            borderRadius: '6px',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            background: badgeColor.bg,
+                            color: badgeColor.text,
+                            border: `1px solid ${badgeColor.border}`
+                          }}>
+                            {subjectName}
+                          </span>
+                          {isCompleted && (
+                            <span style={{
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              background: 'rgba(16, 185, 129, 0.15)',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              fontSize: '0.75rem',
+                              fontWeight: 700
+                            }}>
+                              ✓ Completed (1 Attempt Limit)
+                            </span>
+                          )}
+                        </div>
                         <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
                           ⚡ Full Length Mock
                         </span>
@@ -1848,7 +2028,26 @@ const Exam = () => {
 
                     {/* Action Button */}
                     <div>
-                      {defaultSet ? (
+                      {isCompleted ? (
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled
+                          style={{
+                            width: '100%',
+                            justifyContent: 'center',
+                            padding: '10px 16px',
+                            fontSize: '0.92rem',
+                            fontWeight: 700,
+                            cursor: 'not-allowed',
+                            background: 'rgba(16, 185, 129, 0.12)',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                            color: '#10b981'
+                          }}
+                        >
+                          ✓ Completed (1 Attempt Limit)
+                        </button>
+                      ) : defaultSet ? (
                         <button
                           type="button"
                           className="btn-primary"
@@ -1972,8 +2171,52 @@ const Exam = () => {
         </div>
       </div>
 
+      {/* Exam Already Completed Block Screen */}
+      {examSetId && alreadyCompleted && !submitResult && (
+        <div style={{ maxWidth: '700px', margin: '60px auto', padding: '40px 24px', background: 'var(--s1)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '20px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+          <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', margin: '0 auto 20px' }}>
+            🔒
+          </div>
+          <h2 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--text)', marginBottom: '12px' }}>
+            Exam Already Completed
+          </h2>
+          <div style={{ display: 'inline-block', padding: '6px 16px', borderRadius: '20px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 700, fontSize: '0.88rem', marginBottom: '20px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+            ✓ Attempt Limit Reached (1 Attempt Allowed)
+          </div>
+          <p style={{ color: 'var(--muted)', fontSize: '0.95rem', lineHeight: 1.6, maxWidth: '520px', margin: '0 auto 28px' }}>
+            You have already answered and submitted <strong>"{completedSubmission?.exam_name || examName || 'this exam'}"</strong> on {completedSubmission?.submitted_at ? new Date(completedSubmission.submitted_at).toLocaleDateString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'a previous attempt'}. In accordance with examination regulations, students are allowed to answer each exam only <strong>ONCE</strong>. Re-attempts are strictly restricted.
+          </p>
+
+          {completedSubmission && (
+            <div style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: '14px', padding: '20px', marginBottom: '28px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Score</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--purple-l)' }}>{completedSubmission.score} / {completedSubmission.total_marks || 60}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Percentage</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#38bdf8' }}>{completedSubmission.percentage}%</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', fontWeight: 600 }}>Status</div>
+                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: completedSubmission.status === 'Pass' ? 'var(--green)' : '#ef4444' }}>{completedSubmission.status || 'Submitted'}</div>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleBackToExamSelection}
+            style={{ padding: '12px 28px', fontSize: '1rem', fontWeight: 700, borderRadius: '12px' }}
+          >
+            ← Return to Available Exams
+          </button>
+        </div>
+      )}
+
       {/* Entry Modal / Pre-Exam Screen */}
-      {examSetId && !started && !submitResult && (
+      {examSetId && !started && !submitResult && !alreadyCompleted && (
         <div className="overlay" style={{ display: "flex" }}>
           <div className="entry-modal" style={{ maxWidth: '520px', width: '90%' }}>
             <div className="entry-modal-top">
@@ -3007,9 +3250,10 @@ const Exam = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                       {questions[currentQ].options.map((opt, idx) => {
                         if (submitResult) {
-                          const isCorrectChoice = (currRev?.correct_option_index !== undefined && currRev?.correct_option_index !== null)
-                            ? (idx === currRev.correct_option_index)
-                            : (idx === 0);
+                          const targetCorrIdx = (currRev?.correct_option_index !== undefined && currRev?.correct_option_index !== null)
+                            ? currRev.correct_option_index
+                            : 0;
+                          const isCorrectChoice = idx === targetCorrIdx;
                           const isStudentChoice = (currRev?.student_option_index !== undefined && currRev?.student_option_index !== null)
                             ? (idx === currRev.student_option_index)
                             : (answers[currentQ] === idx);

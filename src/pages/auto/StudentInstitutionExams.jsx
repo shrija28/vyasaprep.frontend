@@ -22,8 +22,9 @@ const StudentInstitutionExams = () => {
           const name = profile.name || profile.full_name || profile.username || (profile.email ? profile.email.split('@')[0] : '');
           if (name) setStudentName(name);
 
-          if (profile.kcet_student_id) setStudentId(profile.kcet_student_id);
-          else setStudentId(generateStudentId(profile));
+          const stdId = profile.kcet_student_id || generateStudentId(profile);
+          setStudentId(stdId);
+          localStorage.setItem('vyasaprep_active_student_id', stdId);
         }
       }
 
@@ -69,12 +70,40 @@ const StudentInstitutionExams = () => {
         }
       }
       const mergedList = mergeExamsWithLocal(fetchedList);
-      const parsedSubjects = normalizeExamSubjects(mergedList);
+
+      const studentInstName = String(profile?.institution_name || profile?.institution_code || profile?.join_code || '').toLowerCase().trim();
+      const studentInstId = String(profile?.institution_id || profile?.join_code || '').toLowerCase().trim();
+
+      const filteredList = mergedList.filter(ex => {
+        if (!ex) return false;
+
+        const exInstId = String(ex.institution_id || ex.created_by_institution_id || '').toLowerCase().trim();
+        const exInstName = String(ex.institution_name || ex.created_by_institution_name || '').toLowerCase().trim();
+
+        // System/admin seed exams MUST NOT appear on institution platform
+        if (ex.created_by_type === 'system' || ex.created_by_type === 'admin' || exInstId === 'system' || exInstId === 'admin') {
+          return false;
+        }
+
+        const matchId = studentInstId && exInstId && (studentInstId === exInstId || studentInstId.includes(exInstId) || exInstId.includes(studentInstId));
+        const matchName = studentInstName && exInstName && (studentInstName === exInstName || studentInstName.includes(exInstName) || exInstName.includes(studentInstName));
+
+        if (exInstId || exInstName) {
+          return Boolean(matchId || matchName);
+        }
+
+        if (ex.created_by_type === 'institution' || ex.created_by_institution === true) {
+          return Boolean(matchId || matchName);
+        }
+
+        return false;
+      });
+
+      const parsedSubjects = normalizeExamSubjects(filteredList);
       setSubjects(parsedSubjects);
     } catch (err) {
       console.error('Error fetching institution exams:', err);
-      const fallbackList = getStoredExams();
-      setSubjects(normalizeExamSubjects(fallbackList));
+      setSubjects([]);
     } finally {
       setLoading(false);
     }
@@ -83,11 +112,24 @@ const StudentInstitutionExams = () => {
   useEffect(() => {
     fetchProfileAndExams();
 
-    const unsubscribe = subscribeToExamChanges((updatedList) => {
-      setSubjects(normalizeExamSubjects(updatedList));
+    const unsubscribe = subscribeToExamChanges(() => {
+      fetchProfileAndExams();
     });
 
-    return () => unsubscribe();
+    const handleUpdate = () => {
+      fetchProfileAndExams();
+    };
+
+    window.addEventListener('exam-submitted', handleUpdate);
+    window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('exam-submitted', handleUpdate);
+      window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, []);
 
   return (
@@ -144,6 +186,17 @@ const StudentInstitutionExams = () => {
                         const defaultSet = getAssignedSetForStudent(exam.sets, studentId);
                         const defaultSetId = defaultSet ? defaultSet.exam_set_id : (exam.exam_id || '');
 
+                        const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+                        const isCompleted = localSubs.some(s =>
+                          s &&
+                          (!s.student_id || !studentId || s.student_id === studentId) &&
+                          (
+                            (s.exam_set_id && defaultSetId && s.exam_set_id === defaultSetId) ||
+                            (s.exam_id && (s.exam_id === exam.exam_id || s.exam_id === exam.id)) ||
+                            (s.exam_name && exam.exam_name && String(s.exam_name).toLowerCase().trim() === String(exam.exam_name).toLowerCase().trim())
+                          )
+                        );
+
                         return (
                           <li
                             key={exam.exam_id || exam.id}
@@ -165,6 +218,11 @@ const StudentInstitutionExams = () => {
                                 <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(124, 58, 237, 0.15)', color: 'var(--purple-l)', fontWeight: 600 }}>
                                   60 MCQs
                                 </span>
+                                {isCompleted && (
+                                  <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700 }}>
+                                    ✓ Completed (1 Attempt Limit)
+                                  </span>
+                                )}
                               </div>
                               <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '4px' }}>
                                 Subject: <strong style={{ color: 'var(--text)' }}>{subjGroup.subject}</strong> • ⏱ {exam.duration_minutes || 60} Mins • 🎯 Max Marks: {exam.total_marks || 60}
@@ -177,11 +235,11 @@ const StudentInstitutionExams = () => {
                             </div>
 
                             <Link
-                              to={`/exam?set=${defaultSetId}&subject=${encodeURIComponent(subjGroup.subject)}&name=${encodeURIComponent(exam.exam_name || subjGroup.subject)}`}
+                              to={`/exam?set=${defaultSetId}&subject=${encodeURIComponent(subjGroup.subject)}&name=${encodeURIComponent(exam.exam_name || subjGroup.subject)}&label=${defaultSet?.set_label || 'A'}`}
                               className="btn-primary"
                               style={{ minWidth: '130px', textAlign: 'center' }}
                             >
-                              Take Exam →
+                              Take Set {defaultSet?.set_label || 'A'} →
                             </Link>
                           </li>
                         );

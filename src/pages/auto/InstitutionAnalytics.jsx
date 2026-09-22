@@ -23,50 +23,18 @@ const InstitutionAnalytics = () => {
         data = await res.json().catch(() => null);
       }
 
-      // Merge local student submissions from localStorage
-      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-      if (localSubs.length > 0) {
-        const avgScoreCalc = Math.round(localSubs.reduce((acc, s) => acc + (s.percentage || 0), 0) / localSubs.length);
-
-        if (!data) {
-          data = {
-            total_students: 1,
-            total_submissions: localSubs.length,
-            average_score: avgScoreCalc,
-            students: [
-              {
-                student_id: 'STD-LIVE-01',
-                display_name: 'Student Candidate',
-                email: 'student@institution.edu',
-                batch_name: 'General Batch',
-                total_attempts: localSubs.length,
-                average_score: avgScoreCalc
-              }
-            ]
-          };
-        } else {
-          data.total_submissions = Math.max(data.total_submissions || 0, localSubs.length);
-          if (!data.average_score || data.average_score === 0) {
-            data.average_score = avgScoreCalc;
-          }
-          if (data.students && Array.isArray(data.students) && data.students.length > 0) {
-            // Update student performance record if exists or append
-            const firstStu = data.students[0];
-            firstStu.total_attempts = Math.max(firstStu.total_attempts || 0, localSubs.length);
-            if (!firstStu.average_score || firstStu.average_score === 0) {
-              firstStu.average_score = avgScoreCalc;
-            }
-          }
-        }
+      if (!data) {
+        data = {
+          total_students: 0,
+          total_submissions: 0,
+          average_score: 0,
+          students: []
+        };
       }
 
-      if (data) {
-        setAnalytics(data);
-        if (data.batches && data.batches.length > 0) {
-          setBatches(data.batches);
-        }
-      } else {
-        setError('Unable to load analytics data');
+      setAnalytics(data);
+      if (data.batches && Array.isArray(data.batches) && data.batches.length > 0) {
+        setBatches(data.batches);
       }
     } catch {
       setError('Network error loading analytics data');

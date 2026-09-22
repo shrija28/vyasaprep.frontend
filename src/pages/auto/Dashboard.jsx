@@ -80,55 +80,55 @@ const Dashboard = () => {
       let finalData = apiData;
 
       if (localSubs.length > 0) {
-        const totalTaken = Math.max(apiData?.kpis?.examsTaken || 0, apiData?.kpis?.submissions || 0, localSubs.length);
+        const totalTaken = localSubs.length;
         const totalScorePctSum = localSubs.reduce((acc, s) => acc + (Number(s.percentage) || 0), 0);
         const calculatedAvgScore = Math.round(totalScorePctSum / Math.max(1, localSubs.length));
         const passCount = localSubs.filter(s => (s.status === 'Pass' || (s.percentage || 0) >= 40)).length;
         const calculatedPassRate = Math.round((passCount / Math.max(1, localSubs.length)) * 100);
 
-        if (!finalData) {
-          finalData = {
-            has_data: true,
-            kpis: {
-              examsTaken: totalTaken,
-              submissions: totalTaken,
-              avgScore: calculatedAvgScore,
-              passRate: calculatedPassRate,
-              avgTime: Math.round(localSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (localSubs.length * 60)),
-              rank: Math.max(120, 45000 - totalTaken * 1400)
-            },
-            topicData: {
-              labels: Array.from(new Set(localSubs.map(s => s.subject || 'General'))),
-              scores: Array.from(new Set(localSubs.map(s => s.subject || 'General'))).map(subj => {
-                const subList = localSubs.filter(s => (s.subject || 'General') === subj);
-                return Math.round(subList.reduce((acc, s) => acc + (s.percentage || 0), 0) / subList.length);
-              })
-            },
-            setData: {
-              labels: localSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
-              scores: localSubs.slice(0, 7).reverse().map(s => s.percentage || 0)
-            },
-            passFailData: {
-              labels: ['Pass', 'Fail'],
-              counts: [passCount, Math.max(0, localSubs.length - passCount)]
-            },
-            examHistory: localSubs
-          };
-        } else if (finalData.kpis) {
-          finalData.kpis.examsTaken = totalTaken;
-          finalData.kpis.submissions = totalTaken;
-          if (finalData.kpis.avgScore === 0 || !finalData.kpis.avgScore) {
-            finalData.kpis.avgScore = calculatedAvgScore;
-          }
-          if (finalData.kpis.passRate === 0 || !finalData.kpis.passRate) {
-            finalData.kpis.passRate = calculatedPassRate;
-          }
-          finalData.has_data = true;
-
-          const mergedHistory = [...localSubs, ...(finalData.examHistory || [])];
-          const uniqueHistory = Array.from(new Map(mergedHistory.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
-          finalData.examHistory = uniqueHistory;
-        }
+        finalData = {
+          has_data: true,
+          kpis: {
+            examsTaken: totalTaken,
+            submissions: totalTaken,
+            avgScore: calculatedAvgScore,
+            passRate: calculatedPassRate,
+            avgTime: Math.round(localSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (localSubs.length * 60)),
+            rank: calculatedAvgScore >= 30 ? '#1' : '—'
+          },
+          topicData: {
+            labels: Array.from(new Set(localSubs.map(s => s.subject || 'General'))),
+            scores: Array.from(new Set(localSubs.map(s => s.subject || 'General'))).map(subj => {
+              const subList = localSubs.filter(s => (s.subject || 'General') === subj);
+              return Math.round(subList.reduce((acc, s) => acc + (s.percentage || 0), 0) / subList.length);
+            })
+          },
+          setData: {
+            labels: localSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
+            scores: localSubs.slice(0, 7).reverse().map(s => s.percentage || 0)
+          },
+          passFailData: {
+            labels: ['Pass', 'Fail'],
+            counts: [passCount, Math.max(0, localSubs.length - passCount)]
+          },
+          examHistory: localSubs
+        };
+      } else {
+        finalData = {
+          has_data: false,
+          kpis: {
+            examsTaken: 0,
+            submissions: 0,
+            avgScore: 0,
+            passRate: 0,
+            avgTime: 0,
+            rank: '—'
+          },
+          topicData: { labels: ['Physics', 'Chemistry', 'Mathematics', 'Biology'], scores: [0, 0, 0, 0] },
+          setData: { labels: ['No Attempts'], scores: [0] },
+          passFailData: { labels: ['Pass', 'Fail'], counts: [0, 0] },
+          examHistory: []
+        };
       }
 
       if (finalData) {
@@ -434,55 +434,6 @@ const Dashboard = () => {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Available Practice Exams Section */}
-        <div className="section-card" style={{ marginBottom: '20px', padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: '600', color: 'var(--text)', margin: 0 }}>📝 Available Practice Exams</h2>
-              <p style={{ fontSize: '0.82rem', color: 'var(--muted)', marginTop: '2px', marginBottom: 0 }}>
-                Select an authentic mock exam created by your administrator
-              </p>
-            </div>
-          </div>
-          {availableSubjects.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)', fontSize: '0.9rem' }}>
-              No published exams available at the moment.
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
-              {availableSubjects.flatMap(sg => (sg.exams || []).map(ex => {
-                const firstSet = ex.sets && ex.sets.length > 0 ? ex.sets[0] : null;
-                return (
-                  <div key={ex.exam_id} style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '12px' }}>
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <span style={{ fontSize: '0.75rem', fontWeight: '700', color: 'var(--purple-l)', background: 'rgba(124,58,237,0.15)', padding: '3px 8px', borderRadius: '4px' }}>
-                          {sg.subject}
-                        </span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>60 Qs • 80 Mins</span>
-                      </div>
-                      <h3 style={{ fontSize: '1.05rem', fontWeight: '600', color: 'var(--text)', marginTop: '8px', marginBottom: '4px' }}>
-                        {ex.exam_name || `${sg.subject} Mock Exam`}
-                      </h3>
-                    </div>
-                    {firstSet ? (
-                      <a 
-                        href={`/exam?set=${firstSet.exam_set_id}&subject=${encodeURIComponent(sg.subject)}&name=${encodeURIComponent(ex.exam_name || sg.subject)}&label=${firstSet.set_label}`}
-                        className="btn-primary"
-                        style={{ textAlign: 'center', padding: '8px 12px', fontSize: '0.85rem', textDecoration: 'none' }}
-                      >
-                        Take Exam →
-                      </a>
-                    ) : (
-                      <button className="btn-primary" disabled style={{ opacity: 0.5 }}>Unavailable</button>
-                    )}
-                  </div>
-                );
-              }))}
-            </div>
-          )}
         </div>
 
         {/* Main Dashboard Content */}

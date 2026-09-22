@@ -48,7 +48,7 @@ const StudentInstitutionDashboard = () => {
           if (profile.institution_name) setInstitutionName(profile.institution_name);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     fetch('/api/student/dashboard-stats', { credentials: 'include' })
       .then(res => res.json())
@@ -72,32 +72,7 @@ const StudentInstitutionDashboard = () => {
           setCohortRank(rankStr);
         }
       })
-      .catch(() => {});
-
-    // Fetch authoritative exams created by admin
-    fetch('/api/student/exams', { credentials: 'include' })
-      .then(res => res.json())
-      .then(d => {
-        let list = [];
-        if (d && Array.isArray(d.subjects)) {
-          d.subjects.forEach(sg => {
-            (sg.exams || []).forEach(ex => {
-              list.push({ ...ex, subject: ex.subject || sg.subject });
-            });
-          });
-        } else if (d && Array.isArray(d.exams)) {
-          list = d.exams;
-        }
-        if (list.length > 0) {
-          const merged = mergeExamsWithLocal(list);
-          setActiveExams(merged.filter(e => e.is_published !== false));
-        } else {
-          setActiveExams(getStoredExams().filter(e => e.is_published !== false));
-        }
-      })
-      .catch(() => {
-        setActiveExams(getStoredExams().filter(e => e.is_published !== false));
-      });
+      .catch(() => { });
   };
 
   useEffect(() => {
@@ -152,7 +127,7 @@ const StudentInstitutionDashboard = () => {
     }
   };
 
-  const filteredColleges = MOCK_COLLEGES[activeTab].filter(c => 
+  const filteredColleges = MOCK_COLLEGES[activeTab].filter(c =>
     c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.branch.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.location.toLowerCase().includes(searchQuery.toLowerCase())
@@ -193,7 +168,7 @@ const StudentInstitutionDashboard = () => {
               disabled={refreshing}
               style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer' }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" /></svg>
               {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
           </div>
@@ -223,47 +198,8 @@ const StudentInstitutionDashboard = () => {
           </div>
         </div>
 
-        {/* Section Grid */}
+        {/* Quick Actions & Links */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px', marginBottom: '24px' }}>
-          {/* 1. Available Exams */}
-          <div className="section-card">
-            <div className="section-card-header" style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h2 style={{ fontSize: '1.05rem', margin: 0 }}>📚 Available Weekly Exams</h2>
-                <p className="section-sub" style={{ margin: '2px 0 0 0' }}>Published by your institution</p>
-              </div>
-              <Link to="/student/institution/exams" style={{ fontSize: '0.82rem', color: 'var(--purple-l)', textDecoration: 'none', fontWeight: 600 }}>
-                View all ({activeExams.length}) →
-              </Link>
-            </div>
-            <div className="section-body" style={{ padding: '16px 20px' }}>
-              {activeExams.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>No published exams available yet.</div>
-              ) : (
-                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                  {activeExams.slice(0, 4).map((exam, i) => {
-                    const name = exam.exam_name || exam.name || 'Weekly Test';
-                    const firstSetId = exam.sets && exam.sets.length > 0 ? exam.sets[0].exam_set_id : (exam.exam_id || exam.id || '');
-                    return (
-                      <li key={exam.exam_id || i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--text)' }}>{name}</div>
-                          <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{exam.subject || 'Mathematics'} • {exam.duration_minutes || 60} Mins</div>
-                        </div>
-                        <Link
-                          to={`/exam?set=${firstSetId}&subject=${encodeURIComponent(exam.subject || 'Mathematics')}&name=${encodeURIComponent(name)}`}
-                          className="btn-primary small"
-                          style={{ padding: '6px 12px', fontSize: '0.78rem', textDecoration: 'none' }}
-                        >
-                          Take Test →
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
 
           {/* 2. Quick Actions */}
           <div className="section-card">

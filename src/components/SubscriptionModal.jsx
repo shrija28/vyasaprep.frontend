@@ -15,7 +15,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
         <h2 id="modalTitle" className="modal-title">Choose Your <span className="grad">Plan</span></h2>
         <p id="modalSubtitle" className="modal-subtitle">Select the plan that best fits your exam preparation needs</p>
       </div>
-      <button className="modal-close" aria-label="Close plan selection dialog" type="button">
+      <button className="modal-close" onClick={onClose} aria-label="Close plan selection dialog" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <line x1="18" y1="6" x2="6" y2="18"/>
           <line x1="6" y1="6" x2="18" y2="18"/>
@@ -40,7 +40,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
             <li className="no"><span className="ic">❌</span><span>AI recommendations</span></li>
             <li className="no"><span className="ic">❌</span><span>Weak-topic analysis</span></li>
           </ul>
-          <button className="pc-cta outline" type="button" data-action="select-free" aria-label="Start with Free Plan">Start Free</button>
+          <button className="pc-cta outline" type="button" onClick={onClose} data-action="select-free" aria-label="Start with Free Plan">Start Free</button>
         </div>
         
         
@@ -59,7 +59,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
             <li className="yes"><span className="ic">✅</span><span>Performance reports</span></li>
             <li className="yes"><span className="ic">✅</span><span>Leaderboard ranking</span></li>
           </ul>
-          <button className="pc-cta trial" type="button" data-action="select-trial" data-plan-id="" aria-label="Start 7-Day Premium Trial for ₹99">Start 7-Day Trial — ₹99</button>
+          <button className="pc-cta trial" type="button" onClick={onClose} data-action="select-trial" data-plan-id="" aria-label="Start 7-Day Premium Trial for ₹99">Start 7-Day Trial — ₹99</button>
         </div>
         
         
@@ -78,7 +78,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
             <li className="yes"><span className="ic">✅</span><span>Performance reports</span></li>
             <li className="yes"><span className="ic">✅</span><span>Leaderboard ranking + medals</span></li>
           </ul>
-          <button className="pc-cta primary" type="button" data-action="select-monthly" data-plan-id="" aria-label="Subscribe to Pro Monthly for ₹349/month">Subscribe Monthly</button>
+          <button className="pc-cta primary" type="button" onClick={onClose} data-action="select-monthly" data-plan-id="" aria-label="Subscribe to Pro Monthly for ₹349/month">Subscribe Monthly</button>
         </div>
         
         
@@ -96,7 +96,7 @@ const SubscriptionModal = ({ isOpen, onClose }) => {
             <li className="yes"><span className="ic">✅</span><span>Advanced performance reports</span></li>
             <li className="yes"><span className="ic">✅</span><span>Priority feature access</span></li>
           </ul>
-          <button className="pc-cta primary" type="button" data-action="select-yearly" data-plan-id="" aria-label="Subscribe to Pro Yearly for ₹2,999/year">Subscribe Yearly</button>
+          <button className="pc-cta primary" type="button" onClick={onClose} data-action="select-yearly" data-plan-id="" aria-label="Subscribe to Pro Yearly for ₹2,999/year">Subscribe Yearly</button>
         </div>
       </div>
       

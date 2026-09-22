@@ -5,17 +5,58 @@
 
 const STORAGE_KEY = 'vyasaprep_institution_exams';
 
-// Helper to ensure only authentic admin-created exams are accepted (no fake/seed mock tests)
-const isAuthenticAdminExam = (exam) => {
-  if (!exam) return false;
-  const id = String(exam.exam_id || exam.id || '');
-  const name = String(exam.exam_name || exam.name || '');
-  if (id.startsWith('EXAM-SEED-')) return false;
-  if (name.includes('Weekly Mock #1 - Calculus & Algebra')) return false;
-  if (name.includes('Physics Practice Test - Electromagnetism')) return false;
-  if (name.includes('Chemistry Full Length Mock') && id.startsWith('EXAM-SEED')) return false;
-  return true;
-};
+// Default mock/seed exams to ensure list is never completely empty
+const DEFAULT_SEED_EXAMS = [
+  {
+    exam_id: 'EXAM-SEED-1',
+    id: 'EXAM-SEED-1',
+    exam_name: 'KCET Weekly Mock #1 - Calculus & Algebra',
+    name: 'KCET Weekly Mock #1 - Calculus & Algebra',
+    subject: 'Mathematics',
+    duration_minutes: 60,
+    total_marks: 60,
+    question_count: 20,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    sets: [
+      { exam_set_id: 'EXAM-SEED-1-A', set_label: 'A' },
+      { exam_set_id: 'EXAM-SEED-1-B', set_label: 'B' },
+      { exam_set_id: 'EXAM-SEED-1-C', set_label: 'C' },
+      { exam_set_id: 'EXAM-SEED-1-D', set_label: 'D' },
+    ]
+  },
+  {
+    exam_id: 'EXAM-SEED-2',
+    id: 'EXAM-SEED-2',
+    exam_name: 'KCET Physics Practice Test - Electromagnetism',
+    name: 'KCET Physics Practice Test - Electromagnetism',
+    subject: 'Physics',
+    duration_minutes: 60,
+    total_marks: 60,
+    question_count: 20,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+    sets: [
+      { exam_set_id: 'EXAM-SEED-2-A', set_label: 'A' },
+      { exam_set_id: 'EXAM-SEED-2-B', set_label: 'B' },
+    ]
+  },
+  {
+    exam_id: 'EXAM-SEED-3',
+    id: 'EXAM-SEED-3',
+    exam_name: 'KCET Chemistry Full Length Mock',
+    name: 'KCET Chemistry Full Length Mock',
+    subject: 'Chemistry',
+    duration_minutes: 60,
+    total_marks: 60,
+    question_count: 20,
+    is_published: true,
+    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
+    sets: [
+      { exam_set_id: 'EXAM-SEED-3-A', set_label: 'A' },
+    ]
+  }
+];
 
 export const getStoredExams = () => {
   try {
@@ -54,7 +95,7 @@ export const generateUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     try {
       return crypto.randomUUID();
-    } catch (e) {}
+    } catch (e) { }
   }
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
@@ -134,14 +175,14 @@ export const mergeExamsWithLocal = (apiExams = []) => {
 
 export const normalizeExamSubjects = (examsList = []) => {
   const groupsMap = {};
-  
+
   (examsList || []).forEach(ex => {
     if (!isAuthenticAdminExam(ex)) return;
     const subj = ex.subject || 'General';
     if (!groupsMap[subj]) {
       groupsMap[subj] = { subject: subj, exams: [], available_exams: 0 };
     }
-    
+
     // Ensure sets exist
     const examId = ex.exam_id || ex.id || `EXAM-${Math.random()}`;
     const sets = ex.sets && ex.sets.length > 0 ? ex.sets : [
@@ -150,7 +191,7 @@ export const normalizeExamSubjects = (examsList = []) => {
       { exam_set_id: generateUUID(), set_label: 'C' },
       { exam_set_id: generateUUID(), set_label: 'D' }
     ];
-    
+
     groupsMap[subj].exams.push({ ...ex, sets });
     groupsMap[subj].available_exams += 1;
   });
