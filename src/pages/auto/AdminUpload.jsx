@@ -9,6 +9,7 @@ const AdminUpload = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [activeTab, setActiveTab] = useState(0);
   const [generatedSets, setGeneratedSets] = useState([]);
+  const [storedCount, setStoredCount] = useState(0);
   const fileInputRef = useRef(null);
 
   const [subject, setSubject] = useState("");
@@ -109,6 +110,7 @@ const AdminUpload = () => {
 
       if (data.sets && data.sets.length > 0) {
         setGeneratedSets(data.sets);
+        setStoredCount(data.added ?? data.sets[0]?.length ?? 60);
       }
       setGenerateStatus('done');
     } catch (err) {
@@ -295,10 +297,10 @@ const AdminUpload = () => {
             }}>
               <div>
                 <span style={{ fontWeight: 700, color: '#059669', fontSize: '0.98rem' }}>
-                  ✓ {generatedSets.reduce((sum, s) => sum + (s?.length || 0), 0)} {subject} questions stored in Question Bank!
+                  ✓ {storedCount || generatedSets[0]?.length || 60} fresh {subject} questions stored in Question Bank!
                 </span>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.86rem', color: 'var(--muted)', lineHeight: 1.4 }}>
-                  No exam was created automatically. The questions are now saved in your Question Bank. To create an exam using these questions, go to the <strong>Exams</strong> tab.
+                  The questions are now saved in your Question Bank. 4 paper sets ({generatedSets[0]?.length || 60} Qs each) are generated below. To create an exam using these questions, go to the <strong>Exams</strong> tab.
                 </p>
               </div>
               <Link to="/admin/exams" className="btn-primary" style={{ textDecoration: 'none', padding: '8px 18px', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
@@ -308,11 +310,11 @@ const AdminUpload = () => {
 
             <div className="output-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div>
-                <h2 className="output-title">📋 4 Generated {subject} Sets (60 Qs per Set — Zero Duplicates)</h2>
+                <h2 className="output-title">📋 4 Generated {subject} Paper Sets ({generatedSets[0]?.length || 60} Qs per Set)</h2>
               </div>
               <div className="output-header-actions">
                 <span style={{ fontSize: '0.88rem', color: 'var(--muted)', background: 'var(--card-bg)', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border)' }}>
-                  Total: {generatedSets.reduce((sum, s) => sum + (s?.length || 0), 0)} Unique {subject} Questions
+                  4 Sets · {generatedSets[0]?.length || 60} Questions per Set
                 </span>
               </div>
             </div>

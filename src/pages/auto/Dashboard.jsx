@@ -5,6 +5,7 @@ import {
 import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
 import { generateStudentId } from '../../utils/studentId';
+import { normalizeExamSubjects } from '../../utils/examStore';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -158,29 +159,49 @@ const Dashboard = () => {
       .catch(() => {});
 
     // 2. Fetch available exams created by admin
-    fetch('/api/student/exams', { credentials: 'include' })
-      .then(res => res.json())
-      .then(d => {
-        if (d.subjects) setAvailableSubjects(d.subjects);
-      })
-      .catch(() => {});
+    const fetchExamsList = () => {
+      fetch('/api/student/exams', { credentials: 'include' })
+        .then(res => res.json())
+        .then(d => {
+          if (d && Array.isArray(d.subjects) && d.subjects.length > 0) {
+            setAvailableSubjects(d.subjects);
+          } else {
+            fetch('/api/admin/exams', { credentials: 'include' })
+              .then(r => r.json())
+              .then(ad => {
+                if (ad && Array.isArray(ad.exams) && ad.exams.length > 0) {
+                  const published = ad.exams.filter(e => e.is_published !== false);
+                  setAvailableSubjects(normalizeExamSubjects(published));
+                }
+              })
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+    fetchExamsList();
 
     // 3. Fetch real performance data
     fetchDashboardData();
 
-    // 4. Auto-update dashboard metrics whenever an exam is submitted or completed
+    // 4. Auto-update dashboard metrics whenever an exam is submitted, completed or created
     const handleUpdate = () => {
       fetchDashboardData();
+      fetchExamsList();
     };
 
     window.addEventListener('exam-submitted', handleUpdate);
     window.addEventListener('exam-completed', handleUpdate);
+    window.addEventListener('exam-created', handleUpdate);
+    window.addEventListener('exam-updated', handleUpdate);
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('focus', handleUpdate);
 
     return () => {
       window.removeEventListener('exam-submitted', handleUpdate);
       window.removeEventListener('exam-completed', handleUpdate);
+      window.removeEventListener('exam-created', handleUpdate);
+      window.removeEventListener('exam-updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('focus', handleUpdate);
     };

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStoredExams, subscribeToExamChanges } from '../../utils/examStore';
+import { getStoredExams, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
 import { generateStudentId, extractStudentName } from '../../utils/studentId';
 
 const MOCK_COLLEGES = {
@@ -73,6 +73,31 @@ const StudentInstitutionDashboard = () => {
         }
       })
       .catch(() => {});
+
+    // Fetch authoritative exams created by admin
+    fetch('/api/student/exams', { credentials: 'include' })
+      .then(res => res.json())
+      .then(d => {
+        let list = [];
+        if (d && Array.isArray(d.subjects)) {
+          d.subjects.forEach(sg => {
+            (sg.exams || []).forEach(ex => {
+              list.push({ ...ex, subject: ex.subject || sg.subject });
+            });
+          });
+        } else if (d && Array.isArray(d.exams)) {
+          list = d.exams;
+        }
+        if (list.length > 0) {
+          const merged = mergeExamsWithLocal(list);
+          setActiveExams(merged.filter(e => e.is_published !== false));
+        } else {
+          setActiveExams(getStoredExams().filter(e => e.is_published !== false));
+        }
+      })
+      .catch(() => {
+        setActiveExams(getStoredExams().filter(e => e.is_published !== false));
+      });
   };
 
   useEffect(() => {

@@ -20,6 +20,7 @@ const AdminExams = () => {
       const res = await fetch('/api/admin/exams', { credentials: 'include' });
       const data = await res.json();
       if (res.ok && data.exams) {
+        mergeExamsWithLocal(data.exams);
         setExams(data.exams.map(e => ({
           id: e.exam_id,
           name: e.exam_name || `KCET ${e.subject} Exam`,
@@ -72,7 +73,8 @@ const AdminExams = () => {
       setMessage(`✓ Exam "${data.exam_name || 'KCET ' + subject + ' Exam'}" created successfully with 60 questions from Question Bank!`);
       setIsError(false);
       setSubject('');
-      fetchExams();
+      await fetchExams();
+      window.dispatchEvent(new Event('exam-created'));
 
       setTimeout(() => {
         setMessage('');
@@ -95,6 +97,7 @@ const AdminExams = () => {
       });
       if (res.ok) {
         await fetchExams();
+        window.dispatchEvent(new Event('exam-created'));
       } else {
         const data = await res.json().catch(() => ({}));
         alert(data.message || data.error || 'Failed to update publish state');
@@ -110,16 +113,8 @@ const AdminExams = () => {
       return;
     }
     
-    // Always delete from persistent local store and broadcast to all pages
-    const updated = deleteStoredExam(id);
-    setExams(updated.map(e => ({
-      id: e.exam_id || e.id,
-      name: e.exam_name || e.name || `KCET ${e.subject} Exam`,
-      subject: e.subject,
-      created: e.created_at ? e.created_at.split('T')[0] : '—',
-      sets: e.sets?.length || e.set_count || 4,
-      status: e.is_published ? 'Active' : 'Draft'
-    })));
+    // Delete from persistent local store and broadcast to all pages
+    deleteStoredExam(id);
 
     try {
       await fetch(`/api/admin/exams/${id}`, {
@@ -127,8 +122,10 @@ const AdminExams = () => {
         credentials: 'include'
       });
     } catch (err) {
-      console.error('Backend delete fallback:', err);
+      console.error('Backend delete error:', err);
     }
+    await fetchExams();
+    window.dispatchEvent(new Event('exam-created'));
   };
 
   const openInspectModal = async (examId) => {
@@ -168,7 +165,7 @@ const AdminExams = () => {
             <div>
               <h2>Create Exam</h2>
               <p className="section-sub">
-                Select a subject to create an exam with 4 paper sets (Sets A, B, C, D — 60 questions each) retrieved directly from your Question Bank
+                Select a subject to create an exam with 60 questions retrieved directly from your Question Bank
               </p>
             </div>
           </div>

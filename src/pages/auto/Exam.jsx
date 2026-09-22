@@ -1028,22 +1028,51 @@ const Exam = () => {
         data = await res.json().catch(() => null);
       }
 
-      // 2. Fallbacks if primary endpoint is not available or non-200
-      if (!data) {
+      // 2. Fallbacks if primary endpoint is not available or returned empty
+      let hasExams = data && ((Array.isArray(data.subjects) && data.subjects.length > 0) || (Array.isArray(data.exams) && data.exams.length > 0));
+
+      if (!hasExams) {
         res = await fetch('/api/student/institution/exams', { credentials: 'include' });
         if (res.ok) {
-          data = await res.json().catch(() => null);
+          const instData = await res.json().catch(() => null);
+          if (instData && ((Array.isArray(instData.subjects) && instData.subjects.length > 0) || (Array.isArray(instData.exams) && instData.exams.length > 0))) {
+            data = instData;
+            hasExams = true;
+          }
         }
       }
 
-      if (!data) {
-        res = await fetch('/api/institution/content/exams', { credentials: 'include' });
+      if (!hasExams) {
+        res = await fetch('/api/admin/exams', { credentials: 'include' });
         if (res.ok) {
-          data = await res.json().catch(() => null);
+          const adminData = await res.json().catch(() => null);
+          if (adminData && Array.isArray(adminData.exams) && adminData.exams.length > 0) {
+            data = { exams: adminData.exams.filter(e => e.is_published !== false) };
+            hasExams = true;
+          }
         }
       }
 
-      const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
+      const fetchedList = [];
+      if (data) {
+        if (Array.isArray(data.subjects)) {
+          data.subjects.forEach(sg => {
+            (sg.exams || []).forEach(ex => {
+              fetchedList.push({
+                ...ex,
+                subject: ex.subject || sg.subject,
+              });
+            });
+          });
+        } else if (Array.isArray(data.exams)) {
+          fetchedList.push(...data.exams);
+        } else if (Array.isArray(data.data)) {
+          fetchedList.push(...data.data);
+        } else if (Array.isArray(data)) {
+          fetchedList.push(...data);
+        }
+      }
+
       const mergedList = mergeExamsWithLocal(fetchedList);
       const scopedSubjects = normalizeExamSubjects(mergedList);
       setPublishedSubjects(scopedSubjects);
@@ -1064,6 +1093,19 @@ const Exam = () => {
     if (!examSetId) {
       fetchPublishedExams();
     }
+    const handleUpdate = () => {
+      if (!examSetId) {
+        fetchPublishedExams();
+      }
+    };
+    window.addEventListener('exam-created', handleUpdate);
+    window.addEventListener('exam-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('exam-created', handleUpdate);
+      window.removeEventListener('exam-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
   }, [examSetId]);
 
   // Handle selecting an exam from published tests list (Assigned based on Student ID: A, B, C, D...)
@@ -1763,7 +1805,7 @@ const Exam = () => {
                           {subjectName}
                         </span>
                         <span style={{ fontSize: '0.8rem', color: 'var(--muted)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          ⏱ 80 Mins
+                          ⚡ Full Length Mock
                         </span>
                       </div>
 
@@ -1794,8 +1836,8 @@ const Exam = () => {
                           <strong style={{ color: 'var(--text)' }}>60 Marks</strong>
                         </div>
                         <div>
-                          <span>Set:</span>{' '}
-                          <strong style={{ color: 'var(--purple-l)' }}>Set {defaultSet?.set_label || 'A'}</strong>
+                          <span>Duration:</span>{' '}
+                          <strong style={{ color: 'var(--purple-l)' }}>80 Mins</strong>
                         </div>
                         <div>
                           <span>Proctoring:</span>{' '}
@@ -3161,10 +3203,30 @@ const Exam = () => {
                 <span className="q-position">{currentQ + 1} of {questions.length}</span>
               </div>
 
-              <button className="btn-primary exam-nav-btn" disabled={currentQ === questions.length - 1} onClick={handleNext}>
-                Next
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
+              {!submitResult && currentQ === questions.length - 1 ? (
+                <button
+                  className="btn-primary exam-nav-btn btn-submit-nav"
+                  onClick={() => handleSubmitExam()}
+                  disabled={submitting}
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    borderColor: '#059669',
+                    color: '#ffffff',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)'
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+                  </svg>
+                  {submitting ? 'Submitting...' : 'Submit'}
+                </button>
+              ) : (
+                <button className="btn-primary exam-nav-btn" disabled={currentQ === questions.length - 1} onClick={handleNext}>
+                  Next
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              )}
             </div>
           </div>
         </div>

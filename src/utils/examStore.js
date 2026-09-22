@@ -5,82 +5,44 @@
 
 const STORAGE_KEY = 'vyasaprep_institution_exams';
 
-// Default mock/seed exams to ensure list is never completely empty
-const DEFAULT_SEED_EXAMS = [
-  {
-    exam_id: 'EXAM-SEED-1',
-    id: 'EXAM-SEED-1',
-    exam_name: 'KCET Weekly Mock #1 - Calculus & Algebra',
-    name: 'KCET Weekly Mock #1 - Calculus & Algebra',
-    subject: 'Mathematics',
-    duration_minutes: 60,
-    total_marks: 60,
-    question_count: 20,
-    is_published: true,
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    sets: [
-      { exam_set_id: 'EXAM-SEED-1-A', set_label: 'A' },
-      { exam_set_id: 'EXAM-SEED-1-B', set_label: 'B' },
-      { exam_set_id: 'EXAM-SEED-1-C', set_label: 'C' },
-      { exam_set_id: 'EXAM-SEED-1-D', set_label: 'D' },
-    ]
-  },
-  {
-    exam_id: 'EXAM-SEED-2',
-    id: 'EXAM-SEED-2',
-    exam_name: 'KCET Physics Practice Test - Electromagnetism',
-    name: 'KCET Physics Practice Test - Electromagnetism',
-    subject: 'Physics',
-    duration_minutes: 60,
-    total_marks: 60,
-    question_count: 20,
-    is_published: true,
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    sets: [
-      { exam_set_id: 'EXAM-SEED-2-A', set_label: 'A' },
-      { exam_set_id: 'EXAM-SEED-2-B', set_label: 'B' },
-    ]
-  },
-  {
-    exam_id: 'EXAM-SEED-3',
-    id: 'EXAM-SEED-3',
-    exam_name: 'KCET Chemistry Full Length Mock',
-    name: 'KCET Chemistry Full Length Mock',
-    subject: 'Chemistry',
-    duration_minutes: 60,
-    total_marks: 60,
-    question_count: 20,
-    is_published: true,
-    created_at: new Date(Date.now() - 86400000 * 6).toISOString(),
-    sets: [
-      { exam_set_id: 'EXAM-SEED-3-A', set_label: 'A' },
-    ]
-  }
-];
+// Helper to ensure only authentic admin-created exams are accepted (no fake/seed mock tests)
+const isAuthenticAdminExam = (exam) => {
+  if (!exam) return false;
+  const id = String(exam.exam_id || exam.id || '');
+  const name = String(exam.exam_name || exam.name || '');
+  if (id.startsWith('EXAM-SEED-')) return false;
+  if (name.includes('Weekly Mock #1 - Calculus & Algebra')) return false;
+  if (name.includes('Physics Practice Test - Electromagnetism')) return false;
+  if (name.includes('Chemistry Full Length Mock') && id.startsWith('EXAM-SEED')) return false;
+  return true;
+};
 
 export const getStoredExams = () => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SEED_EXAMS));
-      return DEFAULT_SEED_EXAMS;
+      return [];
     }
     const parsed = JSON.parse(saved);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      const filtered = parsed.filter(isAuthenticAdminExam);
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+      }
+      return filtered;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_SEED_EXAMS));
-    return DEFAULT_SEED_EXAMS;
+    return [];
   } catch (e) {
     console.error('Error reading stored exams:', e);
-    return DEFAULT_SEED_EXAMS;
+    return [];
   }
 };
 
 export const saveStoredExams = (newList) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newList));
-    window.dispatchEvent(new CustomEvent('exam-updated', { detail: { exams: newList } }));
+    const cleanList = (newList || []).filter(isAuthenticAdminExam);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
+    window.dispatchEvent(new CustomEvent('exam-updated', { detail: { exams: cleanList } }));
     window.dispatchEvent(new Event('exam-created'));
     localStorage.setItem('vyasaprep_last_exam_created', String(Date.now()));
   } catch (e) {
@@ -101,6 +63,7 @@ export const generateUUID = () => {
 };
 
 export const addStoredExam = (exam) => {
+  if (!isAuthenticAdminExam(exam)) return getStoredExams();
   const current = getStoredExams();
   // Ensure default sets exist if missing
   const examId = exam.exam_id || exam.id || `EXAM-${Date.now()}`;
@@ -143,18 +106,18 @@ export const mergeExamsWithLocal = (apiExams = []) => {
   const localExams = getStoredExams();
   const mergedMap = new Map();
 
-  // Load local persistent exams first
+  // Load valid local exams first
   localExams.forEach(e => {
-    if (e) {
+    if (isAuthenticAdminExam(e)) {
       const key = e.exam_id || e.id || e.exam_name;
       if (key) mergedMap.set(key, e);
     }
   });
 
-  // Merge backend API exams
-  if (Array.isArray(apiExams)) {
+  // Merge authoritative backend API exams created by admin
+  if (Array.isArray(apiExams) && apiExams.length > 0) {
     apiExams.forEach(e => {
-      if (e) {
+      if (isAuthenticAdminExam(e)) {
         const key = e.exam_id || e.id || e.exam_name;
         if (key) {
           const existing = mergedMap.get(key) || {};
@@ -172,8 +135,8 @@ export const mergeExamsWithLocal = (apiExams = []) => {
 export const normalizeExamSubjects = (examsList = []) => {
   const groupsMap = {};
   
-  examsList.forEach(ex => {
-    if (!ex) return;
+  (examsList || []).forEach(ex => {
+    if (!isAuthenticAdminExam(ex)) return;
     const subj = ex.subject || 'General';
     if (!groupsMap[subj]) {
       groupsMap[subj] = { subject: subj, exams: [], available_exams: 0 };

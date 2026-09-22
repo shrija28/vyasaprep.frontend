@@ -44,9 +44,25 @@ const LoginPage = () => {
         body: JSON.stringify({ email, password })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // Fallback: if user attempted login on student tab with admin credentials
+        if (role === 'student') {
+          const adminRes = await fetch('/api/auth/admin/login', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          if (adminRes.ok) {
+            const adminData = await adminRes.json();
+            login(adminData);
+            navigate(adminData.redirect || '/admin/dashboard');
+            return;
+          }
+        }
+
         // Handle generic auth failure or lockout
         if (data.error === 'account_locked') {
           setError(data.message || 'Account temporarily locked. Try again later.');

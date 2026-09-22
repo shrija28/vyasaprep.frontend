@@ -49,7 +49,25 @@ const StudentInstitutionExams = () => {
         }
       }
 
-      const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
+      const fetchedList = [];
+      if (data) {
+        if (Array.isArray(data.subjects)) {
+          data.subjects.forEach(sg => {
+            (sg.exams || []).forEach(ex => {
+              fetchedList.push({
+                ...ex,
+                subject: ex.subject || sg.subject,
+              });
+            });
+          });
+        } else if (Array.isArray(data.exams)) {
+          fetchedList.push(...data.exams);
+        } else if (Array.isArray(data.data)) {
+          fetchedList.push(...data.data);
+        } else if (Array.isArray(data)) {
+          fetchedList.push(...data);
+        }
+      }
       const mergedList = mergeExamsWithLocal(fetchedList);
       const parsedSubjects = normalizeExamSubjects(mergedList);
       setSubjects(parsedSubjects);
@@ -145,7 +163,7 @@ const StudentInstitutionExams = () => {
                                   {exam.exam_name || `${subjGroup.subject} Examination`}
                                 </div>
                                 <span style={{ fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', background: 'rgba(124, 58, 237, 0.15)', color: 'var(--purple-l)', fontWeight: 600 }}>
-                                  Set {defaultSet?.set_label || 'A'}
+                                  60 MCQs
                                 </span>
                               </div>
                               <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '4px' }}>
@@ -159,11 +177,11 @@ const StudentInstitutionExams = () => {
                             </div>
 
                             <Link
-                              to={`/exam?set=${defaultSetId}&subject=${encodeURIComponent(subjGroup.subject)}&name=${encodeURIComponent(exam.exam_name || subjGroup.subject)}&label=${defaultSet?.set_label || 'A'}`}
+                              to={`/exam?set=${defaultSetId}&subject=${encodeURIComponent(subjGroup.subject)}&name=${encodeURIComponent(exam.exam_name || subjGroup.subject)}`}
                               className="btn-primary"
                               style={{ minWidth: '130px', textAlign: 'center' }}
                             >
-                              Take Set {defaultSet?.set_label || 'A'} →
+                              Take Exam →
                             </Link>
                           </li>
                         );

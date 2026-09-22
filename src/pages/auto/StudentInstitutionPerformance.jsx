@@ -252,22 +252,11 @@ const StudentInstitutionPerformance = () => {
               </thead>
               <tbody>
                 {history.length === 0 ? (
-                  <>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>KCET Weekly Mock #1</td>
-                      <td style={{ padding: '12px 16px' }}>Mathematics</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--green-l)', fontWeight: 700 }}>52 / 60</td>
-                      <td style={{ padding: '12px 16px' }}><span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(5,150,105,0.15)', color: 'var(--green-l)', fontSize: '0.78rem' }}>Completed</span></td>
-                      <td style={{ padding: '12px 16px' }}><Link to="/exam" className="btn-institution-outline" style={{ padding: '4px 10px', fontSize: '0.78rem' }}>Review Solutions</Link></td>
-                    </tr>
-                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                      <td style={{ padding: '12px 16px', fontWeight: 600 }}>Physics Practice Test #2</td>
-                      <td style={{ padding: '12px 16px' }}>Physics</td>
-                      <td style={{ padding: '12px 16px', color: 'var(--green-l)', fontWeight: 700 }}>44 / 60</td>
-                      <td style={{ padding: '12px 16px' }}><span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(5,150,105,0.15)', color: 'var(--green-l)', fontSize: '0.78rem' }}>Completed</span></td>
-                      <td style={{ padding: '12px 16px' }}><Link to="/exam" className="btn-institution-outline" style={{ padding: '4px 10px', fontSize: '0.78rem' }}>Review Solutions</Link></td>
-                    </tr>
-                  </>
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: 'var(--muted)' }}>
+                      No exam attempts recorded yet. Take an exam to view your performance history.
+                    </td>
+                  </tr>
                 ) : (
                   history.map((h, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
