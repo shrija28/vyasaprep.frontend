@@ -74,17 +74,56 @@ const Dashboard = () => {
         apiData = await res.json().catch(() => null);
       }
 
-      // Merge local submission records from localStorage
-      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-      
-      let finalData = apiData;
+      // Determine logged-in student identity for strict data isolation
+      let currentStudentId = '';
+      if (studentProfile && studentProfile.id && studentProfile.id !== '—') {
+        currentStudentId = String(studentProfile.id).toLowerCase().trim();
+      } else {
+        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+        if (meRes.ok) {
+          const meData = await meRes.json();
+          currentStudentId = String(meData.kcet_student_id || meData.id || meData.sub || meData.email || '').toLowerCase().trim();
+          if (currentStudentId) {
+            localStorage.setItem('vyasaprep_active_student_id', currentStudentId);
+          }
+        }
+      }
 
-      if (localSubs.length > 0) {
-        const totalTaken = localSubs.length;
-        const totalScorePctSum = localSubs.reduce((acc, s) => acc + (Number(s.percentage) || 0), 0);
-        const calculatedAvgScore = Math.round(totalScorePctSum / Math.max(1, localSubs.length));
-        const passCount = localSubs.filter(s => (s.status === 'Pass' || (s.percentage || 0) >= 40)).length;
-        const calculatedPassRate = Math.round((passCount / Math.max(1, localSubs.length)) * 100);
+      if (!currentStudentId) {
+        currentStudentId = String(localStorage.getItem('vyasaprep_active_student_id') || '').toLowerCase().trim();
+      }
+
+      // Merge local submission records strictly for current student
+      const allLocalSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      const userLocalSubs = allLocalSubs.filter(s => {
+        if (!s) return false;
+        if (!currentStudentId) return false; // Do not leak submissions if student ID is unknown
+        const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+        return sId === currentStudentId || (sId && currentStudentId && (sId.includes(currentStudentId) || currentStudentId.includes(sId)));
+      });
+
+      // Filter API submissions for current student if present
+      let apiSubs = [];
+      if (apiData && Array.isArray(apiData.examHistory)) {
+        apiSubs = apiData.examHistory.filter(s => {
+          if (!s) return false;
+          if (!currentStudentId) return true;
+          const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+          return !sId || sId === currentStudentId || sId.includes(currentStudentId) || currentStudentId.includes(sId);
+        });
+      }
+
+      const mergedSubs = [...userLocalSubs, ...apiSubs];
+      const userSubs = Array.from(new Map(mergedSubs.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
+
+      let finalData = null;
+
+      if (userSubs.length > 0) {
+        const totalTaken = userSubs.length;
+        const totalScorePctSum = userSubs.reduce((acc, s) => acc + (Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0), 0);
+        const calculatedAvgScore = Math.round(totalScorePctSum / Math.max(1, userSubs.length));
+        const passCount = userSubs.filter(s => (s.status === 'Pass' || (s.percentage || 0) >= 40)).length;
+        const calculatedPassRate = Math.round((passCount / Math.max(1, userSubs.length)) * 100);
 
         finalData = {
           has_data: true,
@@ -93,25 +132,25 @@ const Dashboard = () => {
             submissions: totalTaken,
             avgScore: calculatedAvgScore,
             passRate: calculatedPassRate,
-            avgTime: Math.round(localSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (localSubs.length * 60)),
+            avgTime: Math.round(userSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (userSubs.length * 60)),
             rank: calculatedAvgScore >= 30 ? '#1' : '—'
           },
           topicData: {
-            labels: Array.from(new Set(localSubs.map(s => s.subject || 'General'))),
-            scores: Array.from(new Set(localSubs.map(s => s.subject || 'General'))).map(subj => {
-              const subList = localSubs.filter(s => (s.subject || 'General') === subj);
-              return Math.round(subList.reduce((acc, s) => acc + (s.percentage || 0), 0) / subList.length);
+            labels: Array.from(new Set(userSubs.map(s => s.subject || 'General'))),
+            scores: Array.from(new Set(userSubs.map(s => s.subject || 'General'))).map(subj => {
+              const subList = userSubs.filter(s => (s.subject || 'General') === subj);
+              return Math.round(subList.reduce((acc, s) => acc + (Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0), 0) / subList.length);
             })
           },
           setData: {
-            labels: localSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
-            scores: localSubs.slice(0, 7).reverse().map(s => s.percentage || 0)
+            labels: userSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
+            scores: userSubs.slice(0, 7).reverse().map(s => Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0)
           },
           passFailData: {
             labels: ['Pass', 'Fail'],
-            counts: [passCount, Math.max(0, localSubs.length - passCount)]
+            counts: [passCount, Math.max(0, userSubs.length - passCount)]
           },
-          examHistory: localSubs
+          examHistory: userSubs
         };
       } else {
         finalData = {

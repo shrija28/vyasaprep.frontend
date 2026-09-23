@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 
 const InstitutionQuestions = () => {
   const [questions, setQuestions] = useState([]);
-  const [counts, setCounts] = useState({});
+  const [counts, setCounts] = useState({ Biology: 0, Physics: 0, Chemistry: 0, Mathematics: 0 });
   const [filterSubject, setFilterSubject] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(15);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -22,24 +23,54 @@ const InstitutionQuestions = () => {
         const p = await res.json();
         if (p && p.authenticated) setInstProfile(p);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Could not fetch auth profile:', e);
+    }
+  }, []);
+
+  const filterForInstitution = useCallback((fetchedList, profile) => {
+    if (!Array.isArray(fetchedList)) return [];
+    if (!profile) return fetchedList;
+
+    const currentInstId = String(profile?.institution_id || profile?.join_code || profile?.id || '').toLowerCase().trim();
+    const currentInstName = String(profile?.institution_name || profile?.name || profile?.username || '').toLowerCase().trim();
+
+    return fetchedList.filter(q => {
+      if (!q) return false;
+      const qInstId = String(q.institution_id || q.created_by_institution_id || q.inst_id || '').toLowerCase().trim();
+      const qInstName = String(q.institution_name || q.created_by_institution_name || q.inst_name || '').toLowerCase().trim();
+
+      // If question object explicitly contains an institution reference, check for match
+      if (qInstId || qInstName) {
+        const matchId = currentInstId && qInstId && (currentInstId === qInstId || currentInstId.includes(qInstId) || qInstId.includes(currentInstId));
+        const matchName = currentInstName && qInstName && (currentInstName === qInstName || currentInstName.includes(qInstName) || qInstName.includes(currentInstName));
+        return Boolean(matchId || matchName);
+      }
+
+      // Default: include question returned by institution-authenticated endpoint
+      return true;
+    });
   }, []);
 
   const fetchCounts = useCallback(async () => {
     try {
-      let profileData = instProfile;
-      if (!profileData) {
-        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-        if (meRes.ok) {
-          profileData = await meRes.json().catch(() => null);
-          if (profileData && profileData.authenticated) setInstProfile(profileData);
+      // First try counts endpoint
+      const countRes = await fetch('/api/institution/content/questions/counts', { credentials: 'include' });
+      if (countRes.ok) {
+        const countData = await countRes.json();
+        if (countData && (countData.counts || countData.counts_by_subject)) {
+          const rawCounts = countData.counts || countData.counts_by_subject || {};
+          const subjectCounts = { Biology: 0, Physics: 0, Chemistry: 0, Mathematics: 0 };
+          Object.entries(rawCounts).forEach(([k, v]) => {
+            const foundKey = Object.keys(subjectCounts).find(sk => sk.toLowerCase() === k.toLowerCase());
+            if (foundKey) subjectCounts[foundKey] = Number(v) || 0;
+          });
+          setCounts(subjectCounts);
+          return;
         }
       }
 
-      const currentInstId = String(profileData?.institution_id || profileData?.join_code || profileData?.id || '').toLowerCase().trim();
-      const currentInstName = String(profileData?.institution_name || profileData?.name || profileData?.username || '').toLowerCase().trim();
-
-      // Fetch questions to compute institution-specific private question counts
+      // Fallback: aggregate from questions list
       let res = await fetch('/api/institution/content/questions?page_size=1000', { credentials: 'include' });
       if (!res.ok) {
         res = await fetch('/api/institution/questions?page_size=1000', { credentials: 'include' });
@@ -54,25 +85,7 @@ const InstitutionQuestions = () => {
           fetchedList = data.questions || data.items || data.mcqs || data.results || data.data || [];
         }
 
-        // STRICT INSTITUTION ISOLATION FOR COUNTS:
-        const instQuestions = fetchedList.filter(q => {
-          if (!q) return false;
-          const qInstId = String(q.institution_id || q.created_by_institution_id || q.inst_id || '').toLowerCase().trim();
-          const qInstName = String(q.institution_name || q.created_by_institution_name || q.inst_name || '').toLowerCase().trim();
-
-          const matchId = currentInstId && qInstId && (currentInstId === qInstId || currentInstId.includes(qInstId) || qInstId.includes(currentInstId));
-          const matchName = currentInstName && qInstName && (currentInstName === qInstName || currentInstName.includes(qInstName) || qInstName.includes(currentInstName));
-
-          if (qInstId || qInstName) {
-            return Boolean(matchId || matchName);
-          }
-
-          if (q.created_by_type === 'institution' || q.created_by_institution === true) {
-            return Boolean(matchId || matchName);
-          }
-
-          return false; // Exclude non-institution system questions from institution count
-        });
+        const instQuestions = filterForInstitution(fetchedList, instProfile);
 
         const subjectCounts = { Biology: 0, Physics: 0, Chemistry: 0, Mathematics: 0 };
         instQuestions.forEach(q => {
@@ -88,29 +101,18 @@ const InstitutionQuestions = () => {
     } catch (err) {
       console.error('Failed to fetch institution question counts:', err);
     }
-  }, [instProfile]);
+  }, [instProfile, filterForInstitution]);
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      let profileData = instProfile;
-      if (!profileData) {
-        const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-        if (meRes.ok) {
-          profileData = await meRes.json().catch(() => null);
-          if (profileData && profileData.authenticated) setInstProfile(profileData);
-        }
-      }
-
-      const currentInstId = String(profileData?.institution_id || profileData?.join_code || profileData?.id || '').toLowerCase().trim();
-      const currentInstName = String(profileData?.institution_name || profileData?.name || profileData?.username || '').toLowerCase().trim();
-
       const params = new URLSearchParams({
         page: String(currentPage),
         page_size: String(pageSize),
       });
       if (filterSubject) params.append('subject', filterSubject);
+      if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
       let res = await fetch(`/api/institution/content/questions?${params.toString()}`, { credentials: 'include' });
       if (!res.ok) {
@@ -120,53 +122,62 @@ const InstitutionQuestions = () => {
       if (res.ok) {
         const data = await res.json();
         let fetchedList = [];
+        let totalCountFromBackend = 0;
         
         if (Array.isArray(data)) {
           fetchedList = data;
+          totalCountFromBackend = data.length;
         } else if (data && typeof data === 'object') {
           fetchedList = data.questions || data.items || data.mcqs || data.results || data.data || [];
+          totalCountFromBackend = data.total || data.count || fetchedList.length;
         }
 
-        // STRICT INSTITUTION QUESTION ISOLATION:
-        const filteredList = fetchedList.filter(q => {
-          if (!q) return false;
-          const qInstId = String(q.institution_id || q.created_by_institution_id || q.inst_id || '').toLowerCase().trim();
-          const qInstName = String(q.institution_name || q.created_by_institution_name || q.inst_name || '').toLowerCase().trim();
+        let filteredList = filterForInstitution(fetchedList, instProfile);
 
-          const matchId = currentInstId && qInstId && (currentInstId === qInstId || currentInstId.includes(qInstId) || qInstId.includes(currentInstId));
-          const matchName = currentInstName && qInstName && (currentInstName === qInstName || currentInstName.includes(qInstName) || qInstName.includes(currentInstName));
+        // Apply client-side subject and search filtering if needed
+        if (filterSubject) {
+          filteredList = filteredList.filter(q => {
+            const s = String(q.subject || q.subject_name || q.category || '').toLowerCase();
+            return s === filterSubject.toLowerCase();
+          });
+        }
 
-          if (qInstId || qInstName) {
-            return Boolean(matchId || matchName);
-          }
-
-          if (q.created_by_type === 'institution' || q.created_by_institution === true) {
-            return Boolean(matchId || matchName);
-          }
-
-          return false;
-        });
+        if (searchQuery.trim()) {
+          const qText = searchQuery.toLowerCase();
+          filteredList = filteredList.filter(q => {
+            const txt = String(q.question || q.question_text || q.stem || q.text || '').toLowerCase();
+            const topic = String(q.topic || q.chapter || q.subtopic || '').toLowerCase();
+            return txt.includes(qText) || topic.includes(qText);
+          });
+        }
 
         setQuestions(filteredList);
 
         const totalInstCount = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
-        setTotalQuestions(filterSubject ? (counts[filterSubject] || filteredList.length) : (totalInstCount || filteredList.length));
+        setTotalQuestions(
+          filterSubject
+            ? (counts[filterSubject] !== undefined ? counts[filterSubject] : filteredList.length)
+            : (totalCountFromBackend || totalInstCount || filteredList.length)
+        );
       } else {
         setQuestions([]);
         setTotalQuestions(0);
       }
     } catch (err) {
       console.error('Failed to fetch institution question bank:', err);
-      setError('Unable to load questions from database. Ensure the backend server is active.');
+      setError('Unable to load questions from database. Please check connection to backend server.');
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize, filterSubject, instProfile, counts]);
+  }, [currentPage, pageSize, filterSubject, searchQuery, instProfile, counts, filterForInstitution]);
 
   useEffect(() => {
     fetchProfile();
+  }, [fetchProfile]);
+
+  useEffect(() => {
     fetchCounts();
-  }, [fetchProfile, fetchCounts]);
+  }, [fetchCounts]);
 
   useEffect(() => {
     fetchQuestions();
@@ -202,6 +213,62 @@ const InstitutionQuestions = () => {
     }
   };
 
+  const parseQuestionDetails = (q) => {
+    const questionText = q.question || q.question_text || q.stem || q.text || q.title || 'Question text unavailable';
+    const subjectName = q.subject || q.subject_name || q.category || 'General';
+    const topicName = q.topic || q.chapter || q.subtopic || '';
+    const sourceType = q.source_type || q.source || (q.created_by_type === 'institution' ? 'Institution Upload' : 'Extracted MCQ');
+
+    const rawOpts = q.options || q.choices || q.answers || [];
+    let optionsList = [];
+    if (Array.isArray(rawOpts)) {
+      optionsList = rawOpts.map((opt, i) => {
+        if (typeof opt === 'object' && opt !== null) {
+          return { label: String.fromCharCode(65 + i), text: opt.text || opt.option || opt.choice || JSON.stringify(opt) };
+        }
+        return { label: String.fromCharCode(65 + i), text: String(opt) };
+      });
+    } else if (typeof rawOpts === 'string') {
+      try {
+        const parsed = JSON.parse(rawOpts);
+        if (Array.isArray(parsed)) {
+          optionsList = parsed.map((opt, i) => ({ label: String.fromCharCode(65 + i), text: String(opt) }));
+        }
+      } catch (e) {}
+    } else if (rawOpts && typeof rawOpts === 'object') {
+      optionsList = Object.entries(rawOpts).map(([k, v]) => ({
+        label: k.toUpperCase(),
+        text: String(v),
+      }));
+    }
+
+    if (optionsList.length === 0) {
+      const keys = ['option_a', 'option_b', 'option_c', 'option_d'];
+      const altKeys = ['option1', 'option2', 'option3', 'option4'];
+      keys.forEach((k, idx) => {
+        const val = q[k] || q[altKeys[idx]];
+        if (val) {
+          optionsList.push({ label: String.fromCharCode(65 + idx), text: String(val) });
+        }
+      });
+    }
+
+    const correctStr = String(q.correct_option ?? q.answer ?? q.correct_answer ?? q.correct ?? '').trim();
+    let correctIdx = -1;
+    if (/^[0-3]$/.test(correctStr)) {
+      correctIdx = parseInt(correctStr, 10);
+    } else if (/^[a-dA-D]$/.test(correctStr)) {
+      correctIdx = correctStr.toUpperCase().charCodeAt(0) - 65;
+    } else if (correctStr) {
+      const found = optionsList.findIndex(o => o.text.toLowerCase() === correctStr.toLowerCase() || o.label.toLowerCase() === correctStr.toLowerCase());
+      if (found !== -1) correctIdx = found;
+    }
+
+    const explanation = q.explanation || q.rationale || q.solution || '';
+
+    return { questionText, subjectName, topicName, sourceType, optionsList, correctIdx, explanation };
+  };
+
   const totalPages = Math.ceil(totalQuestions / pageSize) || 1;
   const subjects = ['Biology', 'Physics', 'Chemistry', 'Mathematics'];
   const totalStored = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
@@ -215,35 +282,53 @@ const InstitutionQuestions = () => {
         <div className="section-card" style={{ marginBottom: '20px' }}>
           <div className="section-card-header" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
             <div className="section-icon" style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(37,99,235,0.2))' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '20px', height: '20px' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '22px', height: '22px', color: 'var(--purple-l)' }}>
                 <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                 <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
               </svg>
             </div>
             <div>
-              <h2 style={{ margin: 0 }}>Institution Question Bank</h2>
-              <p className="section-sub" style={{ margin: '2px 0 0' }}>
-                View and manage all extracted MCQs fetched/stored in your institution's private question bank
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>Institution Question Bank</h2>
+              <p className="section-sub" style={{ margin: '4px 0 0', color: 'var(--muted)' }}>
+                View, filter, and manage all extracted MCQs stored in your institution's private question bank
               </p>
             </div>
             <div style={{ marginLeft: 'auto' }}>
               <Link to="/institution/upload" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '14px', height: '14px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '15px', height: '15px' }}>
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
-                Upload &amp; Extract More
+                Upload &amp; Extract MCQs
               </Link>
             </div>
           </div>
 
           {/* Counts overview tiles */}
-          <div className="section-body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-              <div style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: 'var(--rs)', padding: '14px', textAlign: 'center' }}>
+          <div className="section-body" style={{ marginTop: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
+              <div
+                onClick={() => {
+                  setFilterSubject('');
+                  setCurrentPage(1);
+                }}
+                style={{
+                  background: filterSubject === '' ? 'rgba(124, 58, 237, 0.12)' : 'var(--s2)',
+                  border: filterSubject === '' ? '1px solid var(--purple-l)' : '1px solid var(--border)',
+                  borderRadius: 'var(--rs)',
+                  padding: '14px',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
                 <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--purple-l)' }}>{totalStored || totalQuestions}</div>
-                <div style={{ fontSize: '0.78rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>Total Questions</div>
+                <div style={{ fontSize: '0.78rem', color: filterSubject === '' ? 'var(--purple-l)' : 'var(--muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '2px' }}>
+                  All Subjects
+                </div>
               </div>
               {subjects.map((subj) => (
                 <div
@@ -276,13 +361,41 @@ const InstitutionQuestions = () => {
         <div className="section-card">
           <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h2 style={{ margin: 0 }}>{filterSubject ? `${filterSubject} Questions` : 'All Fetched Questions'} ({totalQuestions})</h2>
-              <p className="section-sub" style={{ margin: '2px 0 0' }}>
-                Showing page {currentPage} of {totalPages}
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700 }}>
+                {filterSubject ? `${filterSubject} Questions` : 'Fetched Question Bank'} ({totalQuestions})
+              </h3>
+              <p className="section-sub" style={{ margin: '2px 0 0', fontSize: '0.82rem' }}>
+                Page {currentPage} of {totalPages}
               </p>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {/* Search Box */}
+              <div style={{ position: 'relative', minWidth: '220px' }}>
+                <input
+                  type="text"
+                  placeholder="Search questions or topics..."
+                  className="text-input"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{ width: '100%', padding: '6px 12px 6px 32px', fontSize: '0.85rem' }}
+                />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', color: 'var(--muted)' }}
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </div>
+
+              {/* Subject Select */}
               <select
                 className="text-input"
                 value={filterSubject}
@@ -290,7 +403,7 @@ const InstitutionQuestions = () => {
                   setFilterSubject(e.target.value);
                   setCurrentPage(1);
                 }}
-                style={{ minWidth: '160px', padding: '6px 12px', fontSize: '0.85rem' }}
+                style={{ minWidth: '150px', padding: '6px 12px', fontSize: '0.85rem' }}
               >
                 <option value="">All Subjects</option>
                 <option value="Biology">Biology</option>
@@ -299,10 +412,29 @@ const InstitutionQuestions = () => {
                 <option value="Mathematics">Mathematics</option>
               </select>
 
+              {/* Page Size Select */}
+              <select
+                className="text-input"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                style={{ minWidth: '90px', padding: '6px 10px', fontSize: '0.85rem' }}
+              >
+                <option value={10}>10 / pg</option>
+                <option value={15}>15 / pg</option>
+                <option value={25}>25 / pg</option>
+                <option value={50}>50 / pg</option>
+              </select>
+
               <button
                 type="button"
                 className="btn-outline small"
-                onClick={fetchQuestions}
+                onClick={() => {
+                  fetchQuestions();
+                  fetchCounts();
+                }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '13px', height: '13px' }}>
@@ -323,10 +455,10 @@ const InstitutionQuestions = () => {
               <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📚</div>
                 <h3 style={{ margin: '0 0 8px 0', color: 'var(--text)' }}>
-                  {filterSubject ? `No ${filterSubject} Questions Fetched` : 'No Questions in Institution Bank'}
+                  {filterSubject ? `No ${filterSubject} Questions Found` : searchQuery ? 'No Matching Questions Found' : 'No Questions in Institution Bank'}
                 </h3>
                 <p style={{ margin: '0 0 20px 0', fontSize: '0.9rem', maxWidth: '480px', marginInline: 'auto' }}>
-                  Upload question papers or textbooks to automatically extract and populate MCQs in your institution question bank.
+                  Upload question papers or textbooks in the Upload section to automatically extract and populate MCQs in your institution question bank.
                 </p>
                 <Link to="/institution/upload" className="btn-primary" style={{ textDecoration: 'none' }}>
                   Upload &amp; Extract MCQs →
@@ -338,27 +470,7 @@ const InstitutionQuestions = () => {
                   const qIndex = (currentPage - 1) * pageSize + idx + 1;
                   const qId = q.id || q.question_id || q._id || idx;
                   const isExpanded = expandedId === qId;
-
-                  const questionText = q.question || q.question_text || q.stem || q.text || q.title || 'Question text unavailable';
-                  const subjectName = q.subject || q.subject_name || q.category || 'General';
-                  const topicName = q.topic || q.chapter || q.subtopic || '';
-
-                  // Extract options array/object safely
-                  const rawOpts = q.options || q.choices || q.answers || [];
-                  let optionsList = [];
-                  if (Array.isArray(rawOpts)) {
-                    optionsList = rawOpts.map((opt, i) => ({
-                      label: String.fromCharCode(65 + i),
-                      text: typeof opt === 'object' ? opt.text || opt.option || opt.choice || JSON.stringify(opt) : String(opt),
-                    }));
-                  } else if (rawOpts && typeof rawOpts === 'object') {
-                    optionsList = Object.entries(rawOpts).map(([key, val]) => ({
-                      label: key.toUpperCase(),
-                      text: String(val),
-                    }));
-                  }
-
-                  const correctStr = String(q.correct_option ?? q.answer ?? q.correct_answer ?? q.correct ?? '').toUpperCase();
+                  const { questionText, subjectName, topicName, sourceType, optionsList, correctIdx, explanation } = parseQuestionDetails(q);
 
                   return (
                     <div
@@ -370,7 +482,7 @@ const InstitutionQuestions = () => {
                         transition: 'background 0.15s ease',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
                             <span style={{ fontWeight: 'bold', color: 'var(--purple-l)', fontSize: '0.9rem' }}>#{qIndex}</span>
@@ -405,38 +517,51 @@ const InstitutionQuestions = () => {
                                 {topicName}
                               </span>
                             )}
+                            {sourceType && (
+                              <span style={{ fontSize: '0.72rem', color: 'var(--muted)', padding: '1px 6px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }}>
+                                {sourceType}
+                              </span>
+                            )}
                           </div>
 
                           <p style={{ margin: 0, fontSize: '0.96rem', fontWeight: 500, color: 'var(--text)', lineHeight: 1.5 }}>
                             {questionText}
                           </p>
 
-                          {/* Options display */}
-                          {optionsList.length > 0 && (
-                            <div style={{ marginTop: '12px', display: isExpanded ? 'grid' : 'none', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
-                              {optionsList.map((opt, oIdx) => {
-                                const isCorrect =
-                                  correctStr === opt.label ||
-                                  correctStr === String(oIdx) ||
-                                  correctStr === opt.text.toUpperCase();
-                                return (
-                                  <div
-                                    key={oIdx}
-                                    style={{
-                                      padding: '8px 12px',
-                                      borderRadius: 'var(--rs)',
-                                      border: isCorrect ? '1px solid #10b981' : '1px solid var(--border)',
-                                      background: isCorrect ? 'rgba(16, 185, 129, 0.1)' : 'var(--s2)',
-                                      fontSize: '0.85rem',
-                                      color: isCorrect ? '#10b981' : 'var(--text)',
-                                      fontWeight: isCorrect ? 600 : 400,
-                                    }}
-                                  >
-                                    <span style={{ fontWeight: 700, marginRight: '6px' }}>{opt.label}.</span>
-                                    {opt.text} {isCorrect && ' ✓'}
-                                  </div>
-                                );
-                              })}
+                          {/* Options display toggle */}
+                          {optionsList.length > 0 && isExpanded && (
+                            <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px dashed var(--border)' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px', marginBottom: '10px' }}>
+                                {optionsList.map((opt, oIdx) => {
+                                  const isCorrect = oIdx === correctIdx;
+                                  return (
+                                    <div
+                                      key={oIdx}
+                                      style={{
+                                        padding: '8px 12px',
+                                        borderRadius: 'var(--rs)',
+                                        border: isCorrect ? '1px solid #10b981' : '1px solid var(--border)',
+                                        background: isCorrect ? 'rgba(16, 185, 129, 0.1)' : 'var(--s2)',
+                                        fontSize: '0.85rem',
+                                        color: isCorrect ? '#10b981' : 'var(--text)',
+                                        fontWeight: isCorrect ? 600 : 400,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                      }}
+                                    >
+                                      <span style={{ fontWeight: 700, color: isCorrect ? '#10b981' : 'var(--purple-l)' }}>({opt.label})</span>
+                                      <span>{opt.text}</span>
+                                      {isCorrect && <span style={{ marginLeft: 'auto', fontWeight: 'bold', fontSize: '0.78rem' }}>✓ Correct</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              {explanation && (
+                                <div style={{ fontSize: '0.82rem', color: 'var(--muted)', fontStyle: 'italic', background: 'rgba(124, 58, 237, 0.05)', padding: '8px 12px', borderRadius: '6px', marginTop: '8px' }}>
+                                  💡 <strong>Explanation:</strong> {explanation}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -468,7 +593,7 @@ const InstitutionQuestions = () => {
 
             {/* Pagination footer */}
             {totalQuestions > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--border)', flexWrap: 'wrap', gap: '10px' }}>
                 <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                   Showing {Math.min((currentPage - 1) * pageSize + 1, totalQuestions)}–{Math.min(currentPage * pageSize, totalQuestions)} of {totalQuestions} questions
                 </span>
@@ -476,7 +601,7 @@ const InstitutionQuestions = () => {
                   <button
                     type="button"
                     className="btn-outline small"
-                    disabled={currentPage <= 1}
+                    disabled={currentPage <= 1 || loading}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   >
                     ← Prev
@@ -484,7 +609,7 @@ const InstitutionQuestions = () => {
                   <button
                     type="button"
                     className="btn-outline small"
-                    disabled={currentPage >= totalPages}
+                    disabled={currentPage >= totalPages || loading}
                     onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   >
                     Next →

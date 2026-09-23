@@ -76,6 +76,7 @@ const StudentInstitutionExams = () => {
 
       const filteredList = mergedList.filter(ex => {
         if (!ex) return false;
+        if (ex.is_published === false) return false;
 
         const exInstId = String(ex.institution_id || ex.created_by_institution_id || '').toLowerCase().trim();
         const exInstName = String(ex.institution_name || ex.created_by_institution_name || '').toLowerCase().trim();
@@ -85,18 +86,17 @@ const StudentInstitutionExams = () => {
           return false;
         }
 
-        const matchId = studentInstId && exInstId && (studentInstId === exInstId || studentInstId.includes(exInstId) || exInstId.includes(studentInstId));
-        const matchName = studentInstName && exInstName && (studentInstName === exInstName || studentInstName.includes(exInstName) || exInstName.includes(studentInstName));
-
-        if (exInstId || exInstName) {
-          return Boolean(matchId || matchName);
+        // If student profile specifies a particular institution ID/name, match against it
+        if (studentInstId || studentInstName) {
+          const matchId = studentInstId && exInstId && (studentInstId === exInstId || studentInstId.includes(exInstId) || exInstId.includes(studentInstId));
+          const matchName = studentInstName && exInstName && (studentInstName === exInstName || studentInstName.includes(exInstName) || exInstName.includes(studentInstName));
+          if (exInstId || exInstName) {
+            return Boolean(matchId || matchName);
+          }
         }
 
-        if (ex.created_by_type === 'institution' || ex.created_by_institution === true) {
-          return Boolean(matchId || matchName);
-        }
-
-        return false;
+        // If student profile has no institution filter or exam was created on institution platform, include it
+        return true;
       });
 
       const parsedSubjects = normalizeExamSubjects(filteredList);
@@ -187,15 +187,19 @@ const StudentInstitutionExams = () => {
                         const defaultSetId = defaultSet ? defaultSet.exam_set_id : (exam.exam_id || '');
 
                         const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-                        const isCompleted = localSubs.some(s =>
-                          s &&
-                          (!s.student_id || !studentId || s.student_id === studentId) &&
-                          (
+                        const curId = String(studentId || localStorage.getItem('vyasaprep_active_student_id') || '').toLowerCase().trim();
+                        const isCompleted = localSubs.some(s => {
+                          if (!s || !curId) return false;
+                          const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+                          const matchesStudent = sId === curId || (curId && sId && (sId.includes(curId) || curId.includes(sId)));
+                          if (!matchesStudent) return false;
+
+                          return (
                             (s.exam_set_id && defaultSetId && s.exam_set_id === defaultSetId) ||
                             (s.exam_id && (s.exam_id === exam.exam_id || s.exam_id === exam.id)) ||
                             (s.exam_name && exam.exam_name && String(s.exam_name).toLowerCase().trim() === String(exam.exam_name).toLowerCase().trim())
-                          )
-                        );
+                          );
+                        });
 
                         return (
                           <li

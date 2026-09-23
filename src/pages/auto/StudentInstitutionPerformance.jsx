@@ -34,22 +34,45 @@ const StudentInstitutionPerformance = () => {
     return Math.round(45000 + (45 - s) * 1222.2);
   };
 
-  const loadPerformanceData = () => {
-    const activeStudentId = localStorage.getItem('vyasaprep_active_student_id') || '';
-    const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]')
-      .filter(s => !s.student_id || !activeStudentId || s.student_id === activeStudentId);
-    fetch('/api/student/dashboard', { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => {
-        const apiHistory = (data && Array.isArray(data.examHistory)) ? data.examHistory : [];
-        const merged = [...localSubs, ...apiHistory];
-        const unique = Array.from(new Map(merged.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
-        setHistory(unique);
-      })
-      .catch(() => {
-        setHistory(localSubs);
-      })
-      .finally(() => setLoading(false));
+  const loadPerformanceData = async () => {
+    try {
+      let activeStudentId = String(localStorage.getItem('vyasaprep_active_student_id') || '').toLowerCase().trim();
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        const pId = String(meData.kcet_student_id || meData.id || meData.sub || meData.email || '').toLowerCase().trim();
+        if (pId) activeStudentId = pId;
+      }
+
+      const allLocalSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      const userLocalSubs = allLocalSubs.filter(s => {
+        if (!s || !activeStudentId) return false;
+        const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+        return sId === activeStudentId || (sId && activeStudentId && (sId.includes(activeStudentId) || activeStudentId.includes(sId)));
+      });
+
+      const res = await fetch('/api/student/dashboard', { credentials: 'include' });
+      let apiHistory = [];
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.examHistory)) {
+          apiHistory = data.examHistory.filter(s => {
+            if (!s) return false;
+            if (!activeStudentId) return true;
+            const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+            return !sId || sId === activeStudentId || sId.includes(activeStudentId) || activeStudentId.includes(sId);
+          });
+        }
+      }
+
+      const merged = [...userLocalSubs, ...apiHistory];
+      const unique = Array.from(new Map(merged.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
+      setHistory(unique);
+    } catch (err) {
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {

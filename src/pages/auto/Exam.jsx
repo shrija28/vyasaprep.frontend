@@ -1454,10 +1454,23 @@ const Exam = () => {
     const recordLocalSubmission = (submissionData) => {
       try {
         const existing = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-        const activeStudentId = studentDetails?.id || localStorage.getItem('vyasaprep_active_student_id') || 'STD-001';
+        const activeStudentId = String(
+          studentDetails?.kcet_student_id ||
+          studentDetails?.id ||
+          studentDetails?.sub ||
+          studentDetails?.email ||
+          localStorage.getItem('vyasaprep_active_student_id') ||
+          'STD-001'
+        ).trim();
+
+        if (activeStudentId && activeStudentId !== 'STD-001') {
+          localStorage.setItem('vyasaprep_active_student_id', activeStudentId);
+        }
+
         const newRecord = {
           id: `sub-${Date.now()}`,
           student_id: activeStudentId,
+          user_id: activeStudentId,
           student_name: studentDetails?.name || 'Student',
           institution_id: studentDetails?.institution_id || '',
           exam_set_id: examSetId,
@@ -1475,7 +1488,15 @@ const Exam = () => {
           submitted_at: new Date().toISOString(),
           time_taken_sec: timeTaken
         };
-        const updated = [newRecord, ...existing.filter(s => !( (s.student_id ? s.student_id === activeStudentId : true) && (s.exam_set_id === examSetId || s.exam_name === newRecord.exam_name) ))];
+        const updated = [newRecord, ...existing.filter(s => {
+          if (!s) return false;
+          const sId = String(s.student_id || s.user_id || '').trim();
+          const targetId = String(activeStudentId).trim();
+          // Keep other students' records unchanged!
+          if (sId !== targetId) return true;
+          // Replace previous submission of the SAME exam for THIS student
+          return !(s.exam_set_id === examSetId || s.exam_name === newRecord.exam_name);
+        })];
         localStorage.setItem('vyasaprep_submissions', JSON.stringify(updated));
         window.dispatchEvent(new CustomEvent('exam-submitted', { detail: newRecord }));
         window.dispatchEvent(new CustomEvent('exam-completed', { detail: newRecord }));

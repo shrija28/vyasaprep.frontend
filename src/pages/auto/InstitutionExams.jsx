@@ -261,36 +261,49 @@ const InstitutionExams = () => {
     const currentInstId = instProfile?.institution_id || instProfile?.join_code || instProfile?.id || 'INST-LOCAL';
     const currentInstName = instProfile?.institution_name || instProfile?.name || instProfile?.username || 'Institution';
 
+    const examTimestamp = Date.now();
+    const newExamId = `EXAM-${examTimestamp}`;
+
+    // Generate 4 sets of 60 questions for this subject
+    const rawSets = generate4SetsOf60Questions(subject || 'Mathematics');
+    const preparedSets = rawSets.map(setObj => ({
+      ...setObj,
+      exam_set_id: `${newExamId}-SET-${setObj.set_label || 'A'}`
+    }));
+
     const createdExamObj = {
-      exam_id: `EXAM-${Date.now()}`,
+      exam_id: newExamId,
+      id: newExamId,
       exam_name: examName.trim(),
       name: examName.trim(),
       subject: subject,
       batch_id: batchId || null,
-      duration_minutes: Number(durationMinutes),
-      total_marks: Number(totalMarks),
-      question_count: Number(questionCount),
-      is_published: isPublished,
+      duration_minutes: Number(durationMinutes) || 60,
+      total_marks: Number(totalMarks) || 60,
+      question_count: Number(questionCount) || 60,
+      is_published: true, // Always publish immediately so students receive the exam!
       created_by_type: 'institution',
       created_by_institution: true,
       institution_id: currentInstId,
       institution_name: currentInstName,
+      sets: preparedSets,
       created_at: new Date().toISOString()
     };
 
-    // Save to central persistent store & broadcast update to all tabs/pages
+    // Save to central persistent store & broadcast update to all student views
     addStoredExam(createdExamObj);
     fetchData();
     setFilterSubject('all');
     setFilterBatch('all');
 
-    setSuccessMsg(`Exam "${createdExamObj.exam_name}" created & scheduled successfully! Click "View Questions" below to inspect assigned questions.`);
+    setSuccessMsg(`✓ Exam "${createdExamObj.exam_name}" generated with 4 Sets (240 MCQs) and published to all students!`);
     setExamName('');
     setScheduledStart('');
     setScheduledEnd('');
 
     try {
       const payload = {
+        exam_id: newExamId,
         exam_name: createdExamObj.exam_name,
         name: createdExamObj.exam_name,
         subject: createdExamObj.subject,
@@ -300,7 +313,8 @@ const InstitutionExams = () => {
         question_count: createdExamObj.question_count,
         scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
         scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
-        is_published: createdExamObj.is_published,
+        is_published: true,
+        sets: preparedSets
       };
 
       let res = await fetch('/api/institution/content/exams', {
@@ -326,7 +340,7 @@ const InstitutionExams = () => {
         }
       }
     } catch {
-      // Backend request silent fallback: persistent local storage already updated
+      // Persistent local storage already updated and broadcasted to students
     } finally {
       setCreating(false);
     }

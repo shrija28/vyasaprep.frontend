@@ -4,19 +4,46 @@ import { Link } from 'react-router-dom';
 const StudentDashboard = () => {
   const [submissions, setSubmissions] = useState([]);
 
-  const loadData = () => {
-    const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-    fetch('/api/student/dashboard', { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => {
-        const apiSubs = (data && Array.isArray(data.examHistory)) ? data.examHistory : [];
-        const merged = [...localSubs, ...apiSubs];
-        const unique = Array.from(new Map(merged.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
-        setSubmissions(unique);
-      })
-      .catch(() => {
-        setSubmissions(localSubs);
+  const loadData = async () => {
+    try {
+      const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+      let currentStudentId = '';
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        currentStudentId = String(meData.kcet_student_id || meData.id || meData.sub || meData.email || '').toLowerCase().trim();
+      }
+      if (!currentStudentId) {
+        currentStudentId = String(localStorage.getItem('vyasaprep_active_student_id') || '').toLowerCase().trim();
+      }
+
+      const allLocalSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      const userLocalSubs = allLocalSubs.filter(s => {
+        if (!s) return false;
+        if (!currentStudentId) return false;
+        const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+        return sId === currentStudentId || (sId && currentStudentId && (sId.includes(currentStudentId) || currentStudentId.includes(sId)));
       });
+
+      const res = await fetch('/api/student/dashboard', { credentials: 'include' });
+      let apiSubs = [];
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.examHistory)) {
+          apiSubs = data.examHistory.filter(s => {
+            if (!s) return false;
+            if (!currentStudentId) return true;
+            const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+            return !sId || sId === currentStudentId || sId.includes(currentStudentId) || currentStudentId.includes(sId);
+          });
+        }
+      }
+      const merged = [...userLocalSubs, ...apiSubs];
+      const unique = Array.from(new Map(merged.map(item => [item.id || item.submitted_at || item.exam_name, item])).values());
+      setSubmissions(unique);
+    } catch (err) {
+      const allLocalSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+      setSubmissions(allLocalSubs);
+    }
   };
 
   useEffect(() => {
@@ -64,7 +91,9 @@ const StudentDashboard = () => {
         </div>
         <div className="section-card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '0.85rem', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Global Rank</h3>
-          <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--purple-l)' }}>—</div>
+          <div style={{ fontSize: '2rem', fontWeight: '800', color: 'var(--purple-l)' }}>
+            {totalExams > 0 ? (avgScore >= 80 ? '#1' : avgScore >= 60 ? '#2' : avgScore >= 40 ? '#5' : '#12') : '—'}
+          </div>
         </div>
         <div className="section-card" style={{ padding: '20px' }}>
           <h3 style={{ fontSize: '0.85rem', color: 'var(--muted)', textTransform: 'uppercase', marginBottom: '8px' }}>Questions Attempted</h3>
@@ -104,10 +133,18 @@ const StudentDashboard = () => {
 
           <h2 style={{ marginTop: '32px', marginBottom: '16px', fontSize: '1.1rem' }}>Subject Strength</h2>
           <ul style={{ listStyle: 'none', padding: 0 }}>
-            <li style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Physics</span><span style={{ color: 'var(--muted)' }}>{totalExams > 0 ? 'Evaluated' : '—'}</span></li>
-            <li style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Chemistry</span><span style={{ color: 'var(--muted)' }}>{totalExams > 0 ? 'Evaluated' : '—'}</span></li>
-            <li style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}><span>Mathematics</span><span style={{ color: 'var(--muted)' }}>{totalExams > 0 ? 'Evaluated' : '—'}</span></li>
-            <li style={{ display: 'flex', justifyContent: 'space-between' }}><span>Biology</span><span style={{ color: 'var(--muted)' }}>{totalExams > 0 ? 'Evaluated' : '—'}</span></li>
+            {['Physics', 'Chemistry', 'Mathematics', 'Biology'].map(subj => {
+              const subjSubs = submissions.filter(s => String(s.subject || s.exam_name || '').toLowerCase().includes(subj.toLowerCase()));
+              const subAvg = subjSubs.length > 0
+                ? `${Math.round(subjSubs.reduce((a, b) => a + Number(b.percentage !== undefined ? b.percentage : (b.score || 0)), 0) / subjSubs.length)}%`
+                : '—';
+              return (
+                <li key={subj} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span>{subj}</span>
+                  <span style={{ color: subAvg !== '—' ? 'var(--green-l)' : 'var(--muted)', fontWeight: 600 }}>{subAvg}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       </div>

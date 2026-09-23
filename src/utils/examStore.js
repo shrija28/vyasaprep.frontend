@@ -5,6 +5,11 @@
 
 const STORAGE_KEY = 'vyasaprep_institution_exams';
 
+export const isAuthenticAdminExam = (exam) => {
+  if (!exam || typeof exam !== 'object') return false;
+  return Boolean(exam.exam_name || exam.name || exam.subject || exam.exam_id || exam.id);
+};
+
 // Default mock/seed exams to ensure list is never completely empty
 const DEFAULT_SEED_EXAMS = [
   {
@@ -162,7 +167,8 @@ export const mergeExamsWithLocal = (apiExams = []) => {
         const key = e.exam_id || e.id || e.exam_name;
         if (key) {
           const existing = mergedMap.get(key) || {};
-          mergedMap.set(key, { ...existing, ...e });
+          const mergedSets = (e.sets && e.sets.length > 0) ? e.sets : (existing.sets || []);
+          mergedMap.set(key, { ...existing, ...e, sets: mergedSets });
         }
       }
     });

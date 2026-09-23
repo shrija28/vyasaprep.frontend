@@ -142,6 +142,41 @@ const InstitutionDashboard = () => {
               <span style={{ fontSize: '0.8rem', color: 'var(--blue)' }}>Build & Schedule Tests →</span>
             </div>
           </Link>
+
+          <Link to="/institution/analytics" style={{ textDecoration: 'none' }}>
+            <div className="kpi-tile" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', transition: 'transform 0.2s', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--muted)', fontWeight: 600 }}>TEST SUBMISSIONS</span>
+                <span style={{ fontSize: '1.4rem' }}>📊</span>
+              </div>
+              <div style={{ fontSize: '2.2rem', fontWeight: 700, color: 'var(--text)' }}>
+                {loading ? '—' : (() => {
+                  const subs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+                  return Math.max(subs.length, dashboardData?.total_submissions || 0);
+                })()}
+              </div>
+              <span style={{ fontSize: '0.8rem', color: 'var(--purple-l)' }}>View Live Leaderboard →</span>
+            </div>
+          </Link>
+
+          <Link to="/institution/analytics" style={{ textDecoration: 'none' }}>
+            <div className="kpi-tile" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px', transition: 'transform 0.2s', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--muted)', fontWeight: 600 }}>CLASS AVERAGE</span>
+                <span style={{ fontSize: '1.4rem' }}>📈</span>
+              </div>
+              <div style={{ fontSize: '2.2rem', fontWeight: 700, color: '#10b981' }}>
+                {loading ? '—' : (() => {
+                  const subs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+                  if (subs.length === 0 && (!dashboardData || !dashboardData.average_score)) return '0.0%';
+                  const localAvg = subs.length > 0 ? Math.round(subs.reduce((a, b) => a + Number(b.percentage !== undefined ? b.percentage : (b.score || 0)), 0) / subs.length) : 0;
+                  const finalAvg = Math.max(localAvg, dashboardData?.average_score || 0);
+                  return `${finalAvg}%`;
+                })()}
+              </div>
+              <span style={{ fontSize: '0.8rem', color: '#10b981' }}>Accuracy Rate →</span>
+            </div>
+          </Link>
         </section>
 
         {/* 2. Getting Started & Quick Action Workflow */}

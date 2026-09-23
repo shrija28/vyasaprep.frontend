@@ -33,46 +33,65 @@ const StudentInstitutionDashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(() => new Date().toLocaleTimeString());
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadDashboardData = () => {
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(res => res.json())
-      .then(profile => {
+  const loadDashboardData = async () => {
+    let currentStudentId = '';
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      if (res.ok) {
+        const profile = await res.json();
         if (profile.authenticated) {
           const name = extractStudentName(profile);
           if (name && name !== 'Student') setStudentName(name);
 
-          if (profile.kcet_student_id) setStudentId(profile.kcet_student_id);
-          else if (profile.sub && !profile.sub.includes('@')) setStudentId(profile.sub);
-          else setStudentId(generateStudentId(profile));
+          const sId = profile.kcet_student_id || (profile.sub && !profile.sub.includes('@') ? profile.sub : generateStudentId(profile));
+          setStudentId(sId);
+          currentStudentId = String(sId || profile.id || profile.sub || profile.email || '').toLowerCase().trim();
 
           if (profile.institution_name) setInstitutionName(profile.institution_name);
         }
-      })
-      .catch(() => { });
+      }
+    } catch (e) {}
 
-    fetch('/api/student/dashboard-stats', { credentials: 'include' })
-      .then(res => res.json())
-      .then(stats => {
+    if (!currentStudentId) {
+      currentStudentId = String(localStorage.getItem('vyasaprep_active_student_id') || '').toLowerCase().trim();
+    }
+
+    // Read and filter local submissions for THIS student
+    const allLocalSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
+    const userSubs = allLocalSubs.filter(s => {
+      if (!s || !currentStudentId) return false;
+      const sId = String(s.student_id || s.user_id || s.sub || '').toLowerCase().trim();
+      return sId === currentStudentId || (sId && currentStudentId && (sId.includes(currentStudentId) || currentStudentId.includes(sId)));
+    });
+
+    try {
+      const res = await fetch('/api/student/dashboard-stats', { credentials: 'include' });
+      if (res.ok) {
+        const stats = await res.json();
         if (stats && !stats.error) {
           const name = extractStudentName(stats.student) || extractStudentName(stats);
           if (name && name !== 'Student') setStudentName(name);
 
-          if (stats.student?.kcet_student_id) setStudentId(stats.student.kcet_student_id);
-          else if (stats.kpis?.studentId) setStudentId(stats.kpis.studentId);
-
           if (stats.student?.institution_name) setInstitutionName(stats.student.institution_name);
-
-          const taken = stats.kpis?.examsTaken ?? stats.kpis?.submissions ?? 0;
-          setExamsTaken(taken);
-
-          const avg = stats.kpis?.avgScore !== undefined ? stats.kpis.avgScore : 0;
-          setAvgScore(`${avg}%`);
 
           const rankStr = stats.kpis?.cohortRank || stats.student?.cohort_rank || '—';
           setCohortRank(rankStr);
         }
-      })
-      .catch(() => { });
+      }
+    } catch (e) {}
+
+    // Calculate metrics strictly for current student
+    const taken = userSubs.length;
+    setExamsTaken(taken);
+
+    if (taken > 0) {
+      const avg = Math.round(userSubs.reduce((acc, s) => acc + (Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0), 0) / taken);
+      setAvgScore(`${avg}%`);
+      if (cohortRank === '—' && avg >= 30) setCohortRank('#1');
+    } else {
+      setAvgScore('0.0%');
+      setCohortRank('—');
+    }
   };
 
   useEffect(() => {
