@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthContext, AuthProvider } from './contexts/AuthContext';
 import './assets/css/style.css'; 
 import './assets/css/institution.css';
 import './assets/css/subscription.css';
@@ -56,6 +56,18 @@ const PublicLayout = ({ children }) => (
   </>
 );
 
+const InstitutionRouteGuard = () => {
+  const { user, loading } = React.useContext(AuthContext);
+  if (loading) return <div className="route-loading" role="status">Checking institution access...</div>;
+
+  const role = String(user?.role || user?.user_type || user?.account_type || '').toLowerCase();
+  if (!user || !['institution', 'institution_admin'].includes(role)) {
+    return <Navigate to="/login" replace state={{ from: '/institution/dashboard' }} />;
+  }
+
+  return <InstitutionLayout />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -109,7 +121,7 @@ function App() {
           </Route>
 
           {/* Institution Routes */}
-          <Route path="/institution" element={<InstitutionLayout />}>
+          <Route path="/institution" element={<InstitutionRouteGuard />}>
             <Route index element={<Navigate to="/institution/dashboard" replace />} />
             <Route path="analytics" element={<InstitutionAnalytics />} />
             <Route path="dashboard" element={<InstitutionDashboard />} />

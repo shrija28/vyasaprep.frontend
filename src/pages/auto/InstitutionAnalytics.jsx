@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 const InstitutionAnalytics = () => {
-  const [searchParams] = useSearchParams();
   const [analytics, setAnalytics] = useState(null);
   const [batches, setBatches] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState('all');
@@ -23,8 +22,6 @@ const InstitutionAnalytics = () => {
         data = await res.json().catch(() => null);
       }
 
-      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-      
       // Group local submissions by student
       const studentMap = new Map();
       
@@ -45,30 +42,6 @@ const InstitutionAnalytics = () => {
         });
       }
 
-      // Merge local storage submissions
-      localSubs.forEach(sub => {
-        if (!sub) return;
-        const sId = String(sub.student_id || sub.user_id || sub.email || sub.student_name || 'STD-001').toLowerCase().trim();
-        const sName = sub.student_name || sub.name || 'Student';
-        const sPct = Number(sub.percentage !== undefined ? sub.percentage : (sub.score || 0));
-
-        if (!studentMap.has(sId)) {
-          studentMap.set(sId, {
-            student_id: sId,
-            display_name: sName,
-            email: sub.email || `${sId.replace(/[^a-z0-9]/gi, '')}@student.vyasaprep.com`,
-            batch_name: sub.batch_name || 'Section A',
-            total_attempts: 1,
-            scores: [sPct]
-          });
-        } else {
-          const existing = studentMap.get(sId);
-          existing.total_attempts += 1;
-          existing.scores.push(sPct);
-          if (sName && sName !== 'Student') existing.display_name = sName;
-        }
-      });
-
       const formattedStudents = Array.from(studentMap.values()).map(s => {
         const avg = s.scores.length > 0 ? Math.round(s.scores.reduce((a, b) => a + b, 0) / s.scores.length) : 0;
         return {
@@ -80,8 +53,8 @@ const InstitutionAnalytics = () => {
       // Sort by average score descending for leaderboard
       formattedStudents.sort((a, b) => b.average_score - a.average_score || b.total_attempts - a.total_attempts);
 
-      const totalSubmissionsCount = Math.max(localSubs.length, data?.total_submissions || 0);
-      const totalStudentsCount = Math.max(formattedStudents.length, data?.total_students || 0);
+      const totalSubmissionsCount = Number(data?.total_submissions ?? data?.submissions_count ?? 0);
+      const totalStudentsCount = Number(data?.total_students ?? data?.students_count ?? formattedStudents.length);
       
       const overallAvg = formattedStudents.length > 0
         ? Math.round(formattedStudents.reduce((a, s) => a + s.average_score, 0) / formattedStudents.length)
@@ -141,6 +114,17 @@ const InstitutionAnalytics = () => {
             </p>
           </div>
           <div className="institution-page-actions" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+
+            <select
+              className="text-input"
+              aria-label="Filter analytics by batch"
+              value={selectedBatch}
+              onChange={(e) => setSelectedBatch(e.target.value)}
+              style={{ width: 'auto', minWidth: '160px' }}
+            >
+              <option value="all">All batches</option>
+              {batches.map((batch) => <option key={batch.batch_id} value={batch.batch_id}>{batch.name}</option>)}
+            </select>
 
             <button
               type="button"

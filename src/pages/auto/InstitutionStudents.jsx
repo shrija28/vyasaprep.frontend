@@ -183,7 +183,9 @@ const InstitutionStudents = () => {
   };
 
   const [selectedStudent, setSelectedStudent] = useState(null);
-  const filteredStudents = students;
+  const filteredStudents = selectedBatchFilter === 'all'
+    ? students
+    : students.filter((student) => String(student.batch_id || '') === String(selectedBatchFilter));
 
   return (
     <>
@@ -239,6 +241,16 @@ const InstitutionStudents = () => {
                 <p className="section-sub">View all registered institution students and their profile details</p>
               </div>
             </div>
+            <select
+              className="text-input"
+              aria-label="Filter students by batch"
+              value={selectedBatchFilter}
+              onChange={(e) => setSelectedBatchFilter(e.target.value)}
+              style={{ width: 'auto', minWidth: '160px' }}
+            >
+              <option value="all">All batches</option>
+              {batches.map((batch) => <option key={batch.batch_id} value={batch.batch_id}>{batch.name}</option>)}
+            </select>
           </div>
 
           <div className="section-body" style={{ padding: 0 }}>
@@ -370,7 +382,7 @@ const InstitutionStudents = () => {
                               className="btn-institution-outline"
                               style={{ padding: '4px 8px', fontSize: '0.78rem' }}
                               onClick={() => {
-                                const url = `${window.location.origin}/invitation/accept?code=${inv.code}`;
+                                const url = `${window.location.origin}/invitation-accept?code=${encodeURIComponent(inv.code)}`;
                                 copyToClipboard(url, 'link');
                               }}
                             >
@@ -443,13 +455,13 @@ const InstitutionStudents = () => {
                       className="text-input"
                       readOnly
                       style={{ flex: 1, fontSize: '0.82rem' }}
-                      value={`${window.location.origin}/invitation/accept?code=${generatedInvite.code}`}
+                      value={`${window.location.origin}/invitation-accept?code=${encodeURIComponent(generatedInvite.code)}`}
                     />
                     <button
                       type="button"
                       className="btn-institution"
                       style={{ padding: '6px 12px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-                      onClick={() => copyToClipboard(`${window.location.origin}/invitation/accept?code=${generatedInvite.code}`, 'link')}
+                      onClick={() => copyToClipboard(`${window.location.origin}/invitation-accept?code=${encodeURIComponent(generatedInvite.code)}`, 'link')}
                     >
                       {copiedLink ? 'Copied!' : 'Copy Link'}
                     </button>

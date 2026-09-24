@@ -48,11 +48,9 @@ const InstitutionSyllabus = () => {
       setLoading(true);
       setError('');
       try {
-        // Try /api/syllabus first, with fallback to /api/admin/syllabus
+        // Use the shared read-only syllabus endpoint; never cross role boundaries.
         let res = await fetch('/api/syllabus', { credentials: 'include' });
-        if (!res.ok) {
-          res = await fetch('/api/admin/syllabus', { credentials: 'include' });
-        }
+        if (!res.ok) throw new Error(`Syllabus request failed (${res.status})`);
         const data = await res.json();
         if (data && data.subjects) {
           setSyllabusSubjects(data.subjects);
@@ -148,7 +146,7 @@ const InstitutionSyllabus = () => {
           }}>
             <div style={{ background: 'var(--s2)', border: '1px solid var(--border)', borderRadius: '12px', padding: '14px', textAlign: 'center' }}>
               <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text)' }}>
-                {summaryStats.total || 124}
+                {summaryStats.total}
               </div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted)', marginTop: '2px' }}>Total Chapters</div>
             </div>

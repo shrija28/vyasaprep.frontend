@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { getStoredExams, saveStoredExams, addStoredExam, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
-import { generate4SetsOf60Questions, generate60QuestionsForSet } from '../../utils/questionGenerator';
+import { getStoredExams, saveStoredExams, addStoredExam, deleteStoredExam, subscribeToExamChanges } from '../../utils/examStore';
 
 const InstitutionExams = () => {
   const [exams, setExams] = useState(getStoredExams());
@@ -37,10 +36,10 @@ const InstitutionExams = () => {
     };
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (silent = false) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-    if (isMountedRef.current) {
+    if (isMountedRef.current && !silent) {
       setLoading(true);
       setError('');
     }
@@ -75,7 +74,9 @@ const InstitutionExams = () => {
       }
 
       const fetchedList = data ? (data.exams || data.data || data.items || (Array.isArray(data) ? data : [])) : [];
-      const mergedList = mergeExamsWithLocal(fetchedList);
+      // The institution API is authoritative for reads. Do not broadcast a
+      // local-storage update while fetching, or subscribers will refetch forever.
+      const mergedList = fetchedList;
 
       // STRICT INSTITUTION ISOLATION:
       // Show ONLY exams created by this specific institution
@@ -98,10 +99,12 @@ const InstitutionExams = () => {
         }
 
         if (ex.created_by_type === 'institution' || ex.created_by_institution === true) {
-          return Boolean(matchId || matchName);
+          return Boolean(matchId || matchName || (!exInstId && !exInstName));
         }
 
-        return false;
+        // The authenticated institution endpoint can omit redundant tenant
+        // fields; only explicit mismatches are rejected above.
+        return !exInstId && !exInstName;
       });
 
       if (isMountedRef.current) {
@@ -130,12 +133,12 @@ const InstitutionExams = () => {
         }
       } catch (qErr) {}
     } catch (err) {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && !silent) {
         setError('Failed to load exams and batch data');
       }
     } finally {
       isFetchingRef.current = false;
-      if (isMountedRef.current) {
+      if (isMountedRef.current && !silent) {
         setLoading(false);
       }
     }
@@ -144,11 +147,11 @@ const InstitutionExams = () => {
   useEffect(() => {
     fetchData();
     const unsubscribe = subscribeToExamChanges(() => {
-      fetchData();
+      fetchData(true);
     });
 
     const handleUpdate = () => {
-      fetchData();
+      fetchData(true);
     };
 
     window.addEventListener('exam-submitted', handleUpdate);
@@ -188,13 +191,6 @@ const InstitutionExams = () => {
           data = await res.json().catch(() => null);
         }
       }
-      if (!data || data.message || data.error) {
-        res = await fetch(`/api/admin/exams/${examId}`, { credentials: 'include' });
-        if (res.ok) {
-          data = await res.json().catch(() => null);
-        }
-      }
-
       if (data && (data.sets || data.questions) && !data.message && !data.error) {
         let rawSets = data.sets || [];
         if (rawSets.length === 0 && Array.isArray(data.questions)) {
@@ -214,14 +210,9 @@ const InstitutionExams = () => {
             explanation: q.explanation || ''
           }));
 
-          // If set has fewer than 60 questions, pad/generate 60 questions
-          if (questions.length < 60) {
-            questions = generate60QuestionsForSet(examSubject, lbl);
-          }
-
           return {
             set_label: lbl,
-            question_count: 60,
+            question_count: questions.length,
             questions: questions
           };
         });
@@ -235,28 +226,12 @@ const InstitutionExams = () => {
         });
         setActiveSetIndex(0);
       } else {
-        const fallbackSets = generate4SetsOf60Questions(examSubject);
-        const fallbackObj = {
-          exam_name: targetExam.exam_name || `${examSubject} Mock Exam`,
-          subject: examSubject,
-          duration_minutes: targetExam.duration_minutes || 60,
-          total_marks: targetExam.total_marks || 60,
-          sets: fallbackSets
-        };
-        setViewingQuestionsExam(fallbackObj);
-        setActiveSetIndex(0);
+        setError('Question data is unavailable for this exam.');
+        setViewingQuestionsExam(null);
       }
     } catch {
-      const fallbackSets = generate4SetsOf60Questions(targetExam.subject || 'Mathematics');
-      const fallbackObj = {
-        exam_name: targetExam.exam_name || `${targetExam.subject || 'Mathematics'} Mock Exam`,
-        subject: targetExam.subject || 'Mathematics',
-        duration_minutes: targetExam.duration_minutes || 60,
-        total_marks: targetExam.total_marks || 60,
-        sets: fallbackSets
-      };
-      setViewingQuestionsExam(fallbackObj);
-      setActiveSetIndex(0);
+      setError('Unable to load questions for this exam.');
+      setViewingQuestionsExam(null);
     } finally {
       setLoadingQuestions(false);
     }
@@ -292,13 +267,6 @@ const InstitutionExams = () => {
     const examTimestamp = Date.now();
     const newExamId = `EXAM-${examTimestamp}`;
 
-    // Generate 4 sets of 60 questions for this subject
-    const rawSets = generate4SetsOf60Questions(subject || 'Mathematics');
-    const preparedSets = rawSets.map(setObj => ({
-      ...setObj,
-      exam_set_id: `${newExamId}-SET-${setObj.set_label || 'A'}`
-    }));
-
     const createdExamObj = {
       exam_id: newExamId,
       id: newExamId,
@@ -309,25 +277,14 @@ const InstitutionExams = () => {
       duration_minutes: Number(durationMinutes) || 60,
       total_marks: Number(totalMarks) || 60,
       question_count: Number(questionCount) || 60,
-      is_published: true, // Always publish immediately so students receive the exam!
+      is_published: isPublished,
       created_by_type: 'institution',
       created_by_institution: true,
       institution_id: currentInstId,
       institution_name: currentInstName,
-      sets: preparedSets,
+      sets: [],
       created_at: new Date().toISOString()
     };
-
-    // Save to central persistent store & broadcast update to all student views
-    addStoredExam(createdExamObj);
-    fetchData();
-    setFilterSubject('all');
-    setFilterBatch('all');
-
-    setSuccessMsg(`✓ Exam "${createdExamObj.exam_name}" generated with 4 Sets (240 MCQs) and published to all students!`);
-    setExamName('');
-    setScheduledStart('');
-    setScheduledEnd('');
 
     try {
       const payload = {
@@ -341,8 +298,8 @@ const InstitutionExams = () => {
         question_count: createdExamObj.question_count,
         scheduled_start: scheduledStart ? new Date(scheduledStart).toISOString() : null,
         scheduled_end: scheduledEnd ? new Date(scheduledEnd).toISOString() : null,
-        is_published: true,
-        sets: preparedSets
+        is_published: isPublished,
+        sets: []
       };
 
       let res = await fetch('/api/institution/content/exams', {
@@ -363,12 +320,20 @@ const InstitutionExams = () => {
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        if (data.exam_id || data.id) {
-          fetchExamQuestions(data.exam_id || data.id);
-        }
+        addStoredExam({ ...createdExamObj, ...data, sets: data.sets || [] });
+        await fetchData();
+        setFilterSubject('all');
+        setFilterBatch('all');
+        setSuccessMsg(`Exam "${createdExamObj.exam_name}" was created${isPublished ? ' and published' : ' as a draft'}.`);
+        setExamName('');
+        setScheduledStart('');
+        setScheduledEnd('');
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.message || data.detail || 'The exam could not be created.');
       }
-    } catch {
-      // Persistent local storage already updated and broadcasted to students
+    } catch (err) {
+      setError('Network error creating the exam. No local exam was saved.');
     } finally {
       setCreating(false);
     }
@@ -377,7 +342,7 @@ const InstitutionExams = () => {
   const handleTogglePublish = async (examId, currentStatus) => {
     setExams(prev => {
       const updated = prev.map(ex => (ex.exam_id === examId || ex.id === examId) ? { ...ex, is_published: !currentStatus } : ex);
-      saveLocalExams(updated);
+      saveStoredExams(updated);
       return updated;
     });
     setSuccessMsg(`Exam status updated to ${!currentStatus ? 'Published' : 'Draft'}`);
@@ -549,6 +514,20 @@ const InstitutionExams = () => {
                 </div>
 
                 <div>
+                  <label className="input-label" htmlFor="batch">Batch / Group</label>
+                  <select
+                    id="batch"
+                    className="text-input"
+                    value={batchId}
+                    onChange={(e) => setBatchId(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">All institution students</option>
+                    {batches.map((batch) => <option key={batch.batch_id} value={batch.batch_id}>{batch.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
                   <label className="input-label" htmlFor="endDate">Due / End Window (Optional)</label>
                   <input
                     type="datetime-local"
@@ -574,12 +553,11 @@ const InstitutionExams = () => {
                 <button
                   type="submit"
                   className="btn-primary"
-                  onClick={handleCreateExam}
                   disabled={creating}
                   style={{ minWidth: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                  {creating ? 'Generating 4 Sets...' : '+ Create & Schedule Exam'}
+                  {creating ? 'Generating 4 Sets...' : 'Create & Schedule Exam'}
                 </button>
               </div>
             </form>

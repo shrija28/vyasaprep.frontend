@@ -45,7 +45,7 @@ const InstitutionLayout = () => {
     <>
       <div className="bg-mesh"></div>
       <Navbar role="Institution" links={institutionLinks} />
-      <div className="main-content">
+      <div className="main-content institution-portal">
         <Outlet />
       </div>
     </>

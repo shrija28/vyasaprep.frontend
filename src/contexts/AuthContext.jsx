@@ -14,12 +14,11 @@ export const AuthProvider = ({ children }) => {
         if (token === 'http-only-cookie') {
           localStorage.removeItem('token');
         }
-        if (token) {
-          // Verify token or get user info
-          const storedUser = localStorage.getItem('user');
-          if (storedUser) {
-             setUser(JSON.parse(storedUser));
-          }
+        // Login may use an HTTP-only cookie, so the user profile must be
+        // restored independently of the optional local token.
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
         }
       } catch (error) {
         console.error('Auth error', error);

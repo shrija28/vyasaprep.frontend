@@ -17,7 +17,7 @@ const Navbar = ({ role, links }) => {
   };
 
   return (
-    <nav className="navbar">
+    <nav className={`navbar ${role === 'Institution' ? 'institution-nav' : ''}`}>
       <div className="nav-brand">
         <div className="brand-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -27,6 +27,7 @@ const Navbar = ({ role, links }) => {
         <span className="brand-name">
           VyasaPrep{role && <span className="brand-ai">{role}</span>}
         </span>
+        {role === 'Institution' && <span className="nav-institution-badge">Institution Portal</span>}
       </div>
       <div className="nav-links">
         {links.map((link) => (
