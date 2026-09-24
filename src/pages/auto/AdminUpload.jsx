@@ -75,8 +75,8 @@ const AdminUpload = () => {
       setUploadMessage(`✓ Successfully indexed ${filesCount} file(s) (${chunksCount} chunks, ${qCount} questions extracted) for ${subject}!`);
     } catch (err) {
       console.error(err);
-      setUploadStatus('done');
-      setUploadMessage(`✓ Files uploaded and indexed for ${subject} RAG pipeline.`);
+      setUploadStatus('idle');
+      setErrorMessage('Network error occurred while uploading. Please verify the /api/admin/upload endpoint and try again.');
     }
   };
 
@@ -124,8 +124,37 @@ const AdminUpload = () => {
 
   return (
     <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .admin-upload-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+        .admin-upload-wrap h2,.admin-upload-wrap h3 { color:#0f172a !important; }
+        .admin-upload-wrap .section-sub { color:#475569 !important; }
+        .admin-upload-wrap .section-card { min-width:0; }
+        .admin-upload-wrap .file-grid span { min-width:0;overflow-wrap:anywhere;word-break:break-word; }
+        @media (max-width:900px) {
+          .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; }
+          .navbar .nav-brand { flex:0 0 auto; }
+          .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+          .navbar .nav-links::-webkit-scrollbar { display:none; }
+          .navbar .nav-actions { flex:0 0 auto; }
+          .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+          .admin-upload-wrap { padding-left:16px !important;padding-right:16px !important; }
+        }
+        @media (max-width:560px) {
+          .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; }
+          .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+          .admin-upload-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+          .admin-upload-wrap .upload-footer { align-items:stretch; }
+          .admin-upload-wrap .upload-footer > * { width:100%; }
+          .admin-upload-wrap .upload-footer .btn-primary { justify-content:center; }
+          .admin-upload-wrap .generate-info-row { display:grid;grid-template-columns:1fr 1fr; }
+          .admin-upload-wrap .generate-info-row .gen-info-chip { text-align:center; }
+          .admin-upload-wrap .paper-preview-card { padding:14px !important; }
+          .admin-upload-wrap .paper-preview-card > div:first-child { align-items:flex-start !important;flex-wrap:wrap;gap:10px; }
+          .admin-upload-wrap .paper-preview-card > div:first-child > div { width:100%; }
+        }
+      ` }} />
       <div className="bg-mesh"></div>
-      <main className="main-wrap">
+      <main className="main-wrap admin-upload-wrap">
         
         <div className="section-card" id="uploadCard">
           <div className="section-card-header">

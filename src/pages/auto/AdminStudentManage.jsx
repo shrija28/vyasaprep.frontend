@@ -1,7 +1,9 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 const AdminStudentManage = () => {
+  const [searchParams] = useSearchParams();
+  const isCreateMode = searchParams.get('action') === 'create';
   return (
     <>
       {/* Auto-injected styles from HTML head */}
@@ -170,6 +172,11 @@ const AdminStudentManage = () => {
       background: rgba(220, 38, 38, 0.12);
       color: var(--red-l);
     }
+    .admin-student-manage-wrap { width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+    .admin-student-manage-wrap h1,.admin-student-manage-wrap h3 { color:#0f172a !important; }
+    .admin-student-manage-wrap > div:first-child p { color:#475569 !important; }
+    @media (max-width:900px) { .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; } .navbar .nav-brand { flex:0 0 auto; } .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;scrollbar-width:none; } .navbar .nav-links::-webkit-scrollbar { display:none; } .navbar .nav-actions { flex:0 0 auto; } .admin-student-manage-wrap { padding-left:16px !important;padding-right:16px !important; } }
+    @media (max-width:560px) { .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; } .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; } .admin-student-manage-wrap { padding-top:18px !important;padding-bottom:48px !important; } .admin-student-manage-wrap .action-buttons { flex-wrap:wrap; } .admin-student-manage-wrap .action-buttons button { flex:1;min-width:120px; } }
   
 ` }} />
       
@@ -178,23 +185,26 @@ const AdminStudentManage = () => {
   
   
 
-  <div className="main-wrap" style={{"maxWidth":"100%","padding":"24px 28px 80px"}}>
+  <div className="main-wrap admin-student-manage-wrap" style={{"maxWidth":"100%","padding":"24px 28px 80px"}}>
 
     
     <div style={{"display":"flex","alignItems":"center","justifyContent":"space-between","marginBottom":"20px"}}>
       <div>
         <h1 style={{"fontSize":"1.6rem","fontWeight":"800","margin":"0 0 3px"}} id="pageTitle">Manage Student</h1>
-        <p style={{"color":"var(--muted)","margin":"0","fontSize":"0.82rem"}} id="pageSubtitle">View and manage student details and subscription</p>
+        <p style={{"color":"var(--muted)","margin":"0","fontSize":"0.82rem"}} id="pageSubtitle">View and manage student details. Subscription/payment features are currently inactive / future feature.</p>
       </div>
     </div>
 
     
-    <div id="loadingState" style={{"textAlign":"center","padding":"60px 20px","color":"var(--muted)"}}>
-      <div style={{"fontSize":"3rem","marginBottom":"12px","opacity":"0.5"}}>⏳</div>
-      <div style={{"fontSize":"1.1rem","fontWeight":"600","marginBottom":"6px"}}>Loading…</div>
+    {!isCreateMode && <div id="loadingState" style={{"textAlign":"center","padding":"60px 20px","color":"var(--muted)"}}>
+      <div style={{"fontSize":"3rem","marginBottom":"12px","opacity":"0.5"}}>👤</div>
+      <div style={{"fontSize":"1.1rem","fontWeight":"600","marginBottom":"6px","color":"#0f172a"}}>Select a student to manage</div>
+      <div style={{ fontSize: '0.88rem', marginBottom: '16px' }}>No student identifier was supplied. Use the Students page to review records.</div>
+      <Link to="/admin/students" className="btn-outline">Back to Students</Link>
     </div>
+    }
 
-    <div id="contentArea" style={{"display":"none"}}>
+    <div id="contentArea" style={{"display": isCreateMode ? 'none' : 'none'}}>
 
       
       <div className="section-grid">
@@ -217,7 +227,7 @@ const AdminStudentManage = () => {
             </div>
             <div className="form-group">
               <label>User ID</label>
-              <input type="text" id="fieldUserId" placeholder="User ID" readonly style={{"background":"var(--s1)","color":"var(--muted)"}}/>
+              <input type="text" id="fieldUserId" placeholder="User ID" readOnly style={{"background":"var(--s1)","color":"var(--muted)"}}/>
             </div>
           </div>
         </div>
@@ -267,9 +277,9 @@ const AdminStudentManage = () => {
     </div>
 
     
-    <div id="createForm" style={{"display":"none"}}>
+    <div id="createForm" style={{"display": isCreateMode ? 'block' : 'none'}}>
       <div className="form-section">
-        <h3>Create New Direct Subscriber Student</h3>
+        <h3>Create New Direct Student</h3>
         <div className="form-row">
           <div className="form-group">
             <label>Name *</label>
@@ -286,10 +296,9 @@ const AdminStudentManage = () => {
             <input type="text" id="createFieldKcetId" placeholder="Optional KCET ID"/>
           </div>
           <div className="form-group">
-            <label>Initial Plan</label>
-            <select id="createFieldPlan">
-              <option value="">No subscription (free)</option>
-            </select>
+            <label>Platform access</label>
+            <input type="text" value="Free access" readOnly aria-label="Platform access" />
+            <small>Subscription/payment features are currently inactive / future feature.</small>
           </div>
         </div>
       </div>
