@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getAdminCache, setAdminCache } from '../../utils/adminCache';
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler
 } from 'chart.js';
@@ -8,68 +9,74 @@ import { Bar, Line } from 'react-chartjs-2';
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 const AdminDashboard = () => {
-  const [data, setData] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState('');
+  const [data, setData] = useState(() => getAdminCache('admin_dashboard_data'));
+  const [lastUpdated, setLastUpdated] = useState(() => getAdminCache('admin_dashboard_data') ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 
   const fetchAdminDashboardData = async () => {
     try {
-      const [dashRes, countsRes, instRes, stuRes] = await Promise.allSettled([
-        fetch('/api/admin/dashboard', { credentials: 'include' }),
-        fetch('/api/admin/questions/counts', { credentials: 'include' }),
-        fetch('/api/admin/institutions', { credentials: 'include' }),
-        fetch('/api/admin/students', { credentials: 'include' })
-      ]);
-
-      let totalInst = 0;
-      let totalStudents = 0;
-      let totalQuestions = 0;
-      let totalExams = 0;
-
-      if (dashRes.status === 'fulfilled' && dashRes.value.ok) {
-        const dashData = await dashRes.value.json();
+      const dashRes = await fetch('/api/admin/dashboard', { credentials: 'include' });
+      if (dashRes.ok) {
+        const dashData = await dashRes.json();
         if (dashData.kpis) {
           setData(dashData);
+          setAdminCache('admin_dashboard_data', dashData);
           setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
           return;
         }
-        totalInst = dashData.total_institutions || dashData.institutions_count || 0;
-        totalStudents = dashData.total_students || dashData.students_count || 0;
-        totalQuestions = dashData.total_questions || dashData.questions_count || 0;
-        totalExams = dashData.total_exams || dashData.exams_count || 0;
-      }
 
-      if (instRes.status === 'fulfilled' && instRes.value.ok) {
-        const instData = await instRes.value.json();
-        const instList = instData.institutions || (Array.isArray(instData) ? instData : []);
-        if (instList.length > 0) totalInst = instList.length;
-      }
+        let totalInst = dashData.total_institutions ?? dashData.institutions_count ?? 0;
+        let totalStudents = dashData.total_students ?? dashData.students_count ?? 0;
+        let totalQuestions = dashData.total_questions ?? dashData.questions_count ?? 0;
+        let totalExams = dashData.total_exams ?? dashData.exams_count ?? 0;
 
-      if (stuRes.status === 'fulfilled' && stuRes.value.ok) {
-        const stuData = await stuRes.value.json();
-        const stuList = stuData.students || (Array.isArray(stuData) ? stuData : []);
-        if (stuList.length > 0) totalStudents = stuList.length;
-      }
+        // Only fetch fallbacks if required counts are missing from dashboard response
+        const needsInst = totalInst === 0;
+        const needsStudents = totalStudents === 0;
+        const needsCounts = totalQuestions === 0;
 
-      if (countsRes.status === 'fulfilled' && countsRes.value.ok) {
-        const countsData = await countsRes.value.json();
-        if (countsData.counts) {
-          totalQuestions = Object.values(countsData.counts).reduce((a, b) => a + Number(b || 0), 0);
+        if (needsInst || needsStudents || needsCounts) {
+          const fallbackRequests = [];
+          if (needsCounts) fallbackRequests.push(fetch('/api/admin/questions/counts', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null));
+          else fallbackRequests.push(Promise.resolve(null));
+
+          if (needsInst) fallbackRequests.push(fetch('/api/admin/institutions', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null));
+          else fallbackRequests.push(Promise.resolve(null));
+
+          if (needsStudents) fallbackRequests.push(fetch('/api/admin/students', { credentials: 'include' }).then(r => r.ok ? r.json() : null).catch(() => null));
+          else fallbackRequests.push(Promise.resolve(null));
+
+          const [countsData, instData, stuData] = await Promise.all(fallbackRequests);
+
+          if (instData) {
+            const instList = instData.institutions || (Array.isArray(instData) ? instData : []);
+            if (instList.length > 0) totalInst = instList.length;
+          }
+          if (stuData) {
+            const stuList = stuData.students || (Array.isArray(stuData) ? stuData : []);
+            if (stuList.length > 0) totalStudents = stuList.length;
+          }
+          if (countsData && countsData.counts) {
+            totalQuestions = Object.values(countsData.counts).reduce((a, b) => a + Number(b || 0), 0);
+          }
         }
-      }
 
-      setData({
-        kpis: {
-          institutions: totalInst || 0,
-          institutionsSub: 'Registered institutions',
-          students: totalStudents || 0,
-          studentsSub: 'Enrolled students',
-          questions: totalQuestions || 0,
-          questionsSub: 'Question bank total',
-          exams: totalExams || 0,
-          examsSub: 'Published exams'
-        }
-      });
-      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        const formattedData = {
+          kpis: {
+            institutions: totalInst || 0,
+            institutionsSub: 'Registered institutions',
+            students: totalStudents || 0,
+            studentsSub: 'Enrolled students',
+            questions: totalQuestions || 0,
+            questionsSub: 'Question bank total',
+            exams: totalExams || 0,
+            examsSub: 'Published exams'
+          }
+        };
+
+        setData(formattedData);
+        setAdminCache('admin_dashboard_data', formattedData);
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      }
     } catch (err) {
       console.error('Failed to fetch admin dashboard:', err);
     }

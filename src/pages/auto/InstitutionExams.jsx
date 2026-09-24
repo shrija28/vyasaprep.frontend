@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { getStoredExams, saveStoredExams, addStoredExam, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
 import { generate4SetsOf60Questions, generate60QuestionsForSet } from '../../utils/questionGenerator';
@@ -27,16 +27,30 @@ const InstitutionExams = () => {
   const [filterSubject, setFilterSubject] = useState('all');
   const [filterBatch, setFilterBatch] = useState('all');
 
+  const isFetchingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const fetchData = async () => {
-    setLoading(true);
-    setError('');
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (isMountedRef.current) {
+      setLoading(true);
+      setError('');
+    }
     try {
       let profileData = instProfile;
       if (!profileData) {
         const meRes = await fetch('/api/auth/me', { credentials: 'include' });
         if (meRes.ok) {
           profileData = await meRes.json().catch(() => null);
-          if (profileData && profileData.authenticated) {
+          if (profileData && profileData.authenticated && isMountedRef.current) {
             setInstProfile(profileData);
           }
         }
@@ -90,26 +104,40 @@ const InstitutionExams = () => {
         return false;
       });
 
-      setExams(instExamsOnly);
+      if (isMountedRef.current) {
+        setExams(instExamsOnly);
+      }
 
       // 2. Fetch Batches
-      const batchRes = await fetch('/api/institution/batches', { credentials: 'include' });
-      if (batchRes.ok) {
-        const bData = await batchRes.json();
-        setBatches(bData.batches || []);
-      }
+      try {
+        const batchRes = await fetch('/api/institution/batches', { credentials: 'include' });
+        if (batchRes.ok) {
+          const bData = await batchRes.json().catch(() => null);
+          if (bData && isMountedRef.current) {
+            setBatches(bData.batches || []);
+          }
+        }
+      } catch (bErr) {}
 
       // 3. Fetch Question Counts
-      const qRes = await fetch('/api/institution/content/questions/counts', { credentials: 'include' });
-      if (qRes.ok) {
-        const qData = await qRes.json();
-        setQuestionCounts(qData.counts || {});
-      }
+      try {
+        const qRes = await fetch('/api/institution/content/questions/counts', { credentials: 'include' });
+        if (qRes.ok) {
+          const qData = await qRes.json().catch(() => null);
+          if (qData && isMountedRef.current) {
+            setQuestionCounts(qData.counts || {});
+          }
+        }
+      } catch (qErr) {}
     } catch (err) {
-      setExams([]);
-      setError('Failed to load exams and batch data');
+      if (isMountedRef.current) {
+        setError('Failed to load exams and batch data');
+      }
     } finally {
-      setLoading(false);
+      isFetchingRef.current = false;
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 

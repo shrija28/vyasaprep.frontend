@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
-import { getStoredExams, mergeExamsWithLocal, normalizeExamSubjects } from '../../utils/examStore';
+import { normalizeExamSubjects } from '../../utils/examStore';
 
 // High-precision face & liveness analyzer that verifies an actual human face is present
 // and strictly rejects covered cameras, black frames, blank walls, and Windows "Camera Off" placeholders.
@@ -1094,7 +1094,7 @@ const Exam = () => {
         data = await res.json().catch(() => null);
       }
 
-      // 2. Fallbacks if primary endpoint is not available or returned empty
+      // 2. Fallback if primary endpoint is not available or returned empty
       let hasExams = data && ((Array.isArray(data.subjects) && data.subjects.length > 0) || (Array.isArray(data.exams) && data.exams.length > 0));
 
       if (!hasExams) {
@@ -1103,17 +1103,6 @@ const Exam = () => {
           const instData = await res.json().catch(() => null);
           if (instData && ((Array.isArray(instData.subjects) && instData.subjects.length > 0) || (Array.isArray(instData.exams) && instData.exams.length > 0))) {
             data = instData;
-            hasExams = true;
-          }
-        }
-      }
-
-      if (!hasExams) {
-        res = await fetch('/api/admin/exams', { credentials: 'include' });
-        if (res.ok) {
-          const adminData = await res.json().catch(() => null);
-          if (adminData && Array.isArray(adminData.exams) && adminData.exams.length > 0) {
-            data = { exams: adminData.exams.filter(e => e.is_published !== false) };
             hasExams = true;
           }
         }
@@ -1139,7 +1128,7 @@ const Exam = () => {
         }
       }
 
-      const mergedList = mergeExamsWithLocal(fetchedList);
+      const mergedList = fetchedList;
 
       // --- STRICT INSTITUTION EXAM VISIBILITY RULES ---
       const isInstitutionalStudent = Boolean(
@@ -1186,8 +1175,8 @@ const Exam = () => {
       }
     } catch (err) {
       console.error('Failed to retrieve published exams:', err);
-      const fallbackList = getStoredExams();
-      setPublishedSubjects(normalizeExamSubjects(fallbackList));
+      setPublishedError('Unable to retrieve published exams. Please check your connection.');
+      setPublishedSubjects([]);
     } finally {
       setLoadingPublished(false);
     }
@@ -1354,42 +1343,9 @@ const Exam = () => {
         }
 
         if (!loadedSuccessfully) {
-          // Check local stored exams first to see if questions are saved locally
-          const localExams = getStoredExams();
-          let matchedQuestions = null;
-          let matchedSubj = subject;
-
-          for (const ex of localExams) {
-            if (ex) {
-              const matchedSet = (ex.sets || []).find(s => s.exam_set_id === examSetId || s.id === examSetId);
-              if (matchedSet && matchedSet.questions && matchedSet.questions.length > 0) {
-                matchedQuestions = matchedSet.questions;
-                if (ex.subject) matchedSubj = ex.subject;
-                break;
-              }
-              if ((ex.exam_id === examSetId || ex.id === examSetId || ex.exam_name === examName) && ex.questions && ex.questions.length > 0) {
-                matchedQuestions = ex.questions;
-                if (ex.subject) matchedSubj = ex.subject;
-                break;
-              }
-            }
-          }
-
-          if (matchedQuestions && matchedQuestions.length > 0) {
-            setQuestions(matchedQuestions.map((q, idx) => ({
-              id: `q${idx + 1}`,
-              text: q.text || q.q || q.question_text,
-              options: Array.isArray(q.options) ? q.options : (Array.isArray(q.opts) ? q.opts : (typeof q.opts === 'string' ? JSON.parse(q.opts) : [])),
-              topic: q.topic || 'General',
-              subtype: q.subtype || 'theory_definition',
-              explanation: q.explanation || q.exp || '',
-              marks: q.marks || 1
-            })));
-          } else {
-            // Fall back to generating robust subject-specific KCET questions
-            const fallbackQs = getFallbackQuestionsForSubject(subject || examName || 'Biology', examName);
-            setQuestions(fallbackQs);
-          }
+          // Fall back to generating robust subject-specific KCET questions
+          const fallbackQs = getFallbackQuestionsForSubject(subject || examName || 'Biology', examName);
+          setQuestions(fallbackQs);
         }
       } catch (err) {
         const fallbackQs = getFallbackQuestionsForSubject(subject || examName || 'Biology', examName);

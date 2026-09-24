@@ -197,26 +197,30 @@ const Dashboard = () => {
       })
       .catch(() => {});
 
-    // 2. Fetch available exams created by admin
+    // 2. Fetch available exams authorized for student
     const fetchExamsList = () => {
       fetch('/api/student/exams', { credentials: 'include' })
         .then(res => res.json())
         .then(d => {
-          if (d && Array.isArray(d.subjects) && d.subjects.length > 0) {
+          if (!d) {
+            setAvailableSubjects([]);
+            return;
+          }
+          if (Array.isArray(d.subjects) && d.subjects.length > 0) {
             setAvailableSubjects(d.subjects);
+          } else if (Array.isArray(d.exams) && d.exams.length > 0) {
+            const published = d.exams.filter(e => e.is_published !== false);
+            setAvailableSubjects(normalizeExamSubjects(published));
+          } else if (Array.isArray(d) && d.length > 0) {
+            const published = d.filter(e => e.is_published !== false);
+            setAvailableSubjects(normalizeExamSubjects(published));
           } else {
-            fetch('/api/admin/exams', { credentials: 'include' })
-              .then(r => r.json())
-              .then(ad => {
-                if (ad && Array.isArray(ad.exams) && ad.exams.length > 0) {
-                  const published = ad.exams.filter(e => e.is_published !== false);
-                  setAvailableSubjects(normalizeExamSubjects(published));
-                }
-              })
-              .catch(() => {});
+            setAvailableSubjects([]);
           }
         })
-        .catch(() => {});
+        .catch(() => {
+          setAvailableSubjects([]);
+        });
     };
     fetchExamsList();
 

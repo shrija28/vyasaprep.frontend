@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStoredExams, deleteStoredExam, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
+import { deleteStoredExam } from '../../utils/examStore';
 import { generate4SetsOf60Questions, generate60QuestionsForSet } from '../../utils/questionGenerator';
+import { getAdminCache, setAdminCache, clearAdminCache } from '../../utils/adminCache';
 
 const AdminExams = () => {
-  const [exams, setExams] = useState([]);
+  const cachedExams = getAdminCache('admin_exams_data');
+
+  const [exams, setExams] = useState(() => cachedExams || []);
   const [subject, setSubject] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -20,16 +23,26 @@ const AdminExams = () => {
     try {
       const res = await fetch('/api/admin/exams', { credentials: 'include' });
       const data = await res.json();
-      if (res.ok && data.exams) {
-        mergeExamsWithLocal(data.exams);
-        setExams(data.exams.map(e => ({
-          id: e.exam_id,
-          name: e.exam_name || `KCET ${e.subject} Exam`,
-          subject: e.subject,
-          created: e.created_at ? e.created_at.split('T')[0] : '—',
-          sets: e.set_count || 4,
-          status: e.is_published ? 'Active' : 'Draft'
-        })));
+      if (res.ok && data) {
+        const rawList = data.exams || data.data || (Array.isArray(data) ? data : []);
+        
+        // Filter strictly by backend owner_type === "admin"
+        const parsedExams = rawList
+          .filter(e => String(e.owner_type || '').toLowerCase().trim() === 'admin')
+          .map(e => ({
+            id: e.exam_id || e.id,
+            name: e.exam_name || e.name || `KCET ${e.subject} Exam`,
+            subject: e.subject,
+            created: e.created_at ? String(e.created_at).split('T')[0] : '—',
+            sets: e.set_count || e.sets || 4,
+            status: e.is_published ? 'Active' : 'Draft',
+            institution_id: null,
+            institution_name: null,
+            owner_type: 'admin'
+          }));
+
+        setExams(parsedExams);
+        setAdminCache('admin_exams_data', parsedExams);
       }
     } catch (err) {
       console.error('Failed to load exams', err);
@@ -74,6 +87,8 @@ const AdminExams = () => {
       setMessage(`✓ Exam "${data.exam_name || 'KCET ' + subject + ' Exam'}" created successfully with 60 questions from Question Bank!`);
       setIsError(false);
       setSubject('');
+      clearAdminCache('admin_exams_data');
+      clearAdminCache('admin_dashboard_data');
       await fetchExams();
       window.dispatchEvent(new Event('exam-created'));
 
@@ -97,6 +112,8 @@ const AdminExams = () => {
         body: JSON.stringify({ is_published: targetPublish })
       });
       if (res.ok) {
+        clearAdminCache('admin_exams_data');
+        clearAdminCache('admin_dashboard_data');
         await fetchExams();
         window.dispatchEvent(new Event('exam-created'));
       } else {
@@ -116,6 +133,8 @@ const AdminExams = () => {
     
     // Delete from persistent local store and broadcast to all pages
     deleteStoredExam(id);
+    clearAdminCache('admin_exams_data');
+    clearAdminCache('admin_dashboard_data');
 
     try {
       await fetch(`/api/admin/exams/${id}`, {
@@ -264,22 +283,25 @@ const AdminExams = () => {
         </div>
         
         <div className="section-card">
-          <div className="section-card-header">
-            <div className="section-icon" style={{"background":"linear-gradient(135deg,rgba(8,145,178,0.2),rgba(5,150,105,0.2))"}}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-            </div>
-            <div>
-              <h2>All Created Exams</h2>
-              <p className="section-sub">{exams.length} exams available in system</p>
+          <div className="section-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div className="section-icon" style={{ "background": "linear-gradient(135deg,rgba(8,145,178,0.2),rgba(5,150,105,0.2))" }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </div>
+              <div>
+                <h2>All Created Exams</h2>
+                <p className="section-sub">{exams.length} of {exams.length} exams displayed</p>
+              </div>
             </div>
           </div>
-          <div className="section-body" style={{"padding":"0"}}>
+          <div className="section-body" style={{ "padding": "0" }}>
             <div className="table-scroll">
               <table className="results-table">
                 <thead>
                   <tr>
                     <th>Exam Name</th>
                     <th>Subject</th>
+                    <th>Owner</th>
                     <th>Questions</th>
                     <th>Created</th>
                     <th>Status</th>
@@ -290,7 +312,7 @@ const AdminExams = () => {
                   {exams.length > 0 ? (
                     exams.map(exam => (
                       <tr key={exam.id}>
-                        <td style={{fontWeight: 600, color: 'var(--blue)'}}>{exam.name}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--blue)' }}>{exam.name}</td>
                         <td>
                           <span style={{
                             padding: '3px 10px',
@@ -301,6 +323,18 @@ const AdminExams = () => {
                             fontWeight: 600
                           }}>
                             {exam.subject}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{
+                            padding: '3px 9px',
+                            borderRadius: '12px',
+                            fontSize: '0.78rem',
+                            background: 'rgba(124, 58, 237, 0.15)',
+                            color: 'var(--purple-l)',
+                            fontWeight: 600
+                          }}>
+                            👑 Main Admin
                           </span>
                         </td>
                         <td>{exam.sets === 1 ? '60 Questions (1 Set)' : `${exam.sets * 60} Qs (${exam.sets} Sets)`}</td>
@@ -318,7 +352,7 @@ const AdminExams = () => {
                           </span>
                         </td>
                         <td>
-                          <div style={{display: 'flex', gap: '8px'}}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
                             <button 
                               className="btn-outline small"
                               onClick={() => openInspectModal(exam.id)}
@@ -330,14 +364,14 @@ const AdminExams = () => {
                             <button 
                               className="btn-outline small"
                               onClick={() => togglePublish(exam.id, exam.status)}
-                              style={exam.status === 'Draft' ? {borderColor: 'var(--green)', color: 'var(--green)'} : {borderColor: '#d97706', color: '#d97706'}}
+                              style={exam.status === 'Draft' ? { borderColor: 'var(--green)', color: 'var(--green)' } : { borderColor: '#d97706', color: '#d97706' }}
                             >
                               {exam.status === 'Draft' ? 'Publish' : 'Unpublish'}
                             </button>
                             <button 
                               className="btn-outline small"
                               onClick={() => handleDeleteExam(exam.id, exam.name)}
-                              style={{borderColor: 'var(--red)', color: 'var(--red)'}}
+                              style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
                               title="Delete Exam"
                             >
                               Delete
@@ -347,7 +381,11 @@ const AdminExams = () => {
                       </tr>
                     ))
                   ) : (
-                    <tr><td colSpan="6" style={{"textAlign":"center","color":"var(--muted)","padding":"36px"}}>No exams created yet. Select a subject above and click "+ Create Exam".</td></tr>
+                    <tr>
+                      <td colSpan="7" style={{ "textAlign": "center", "color": "var(--muted)", "padding": "36px" }}>
+                        No admin exams created yet. Select a subject above and click "+ Create Exam".
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>

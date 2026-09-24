@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
-import { getStoredExams, mergeExamsWithLocal, normalizeExamSubjects, subscribeToExamChanges } from '../../utils/examStore';
+import { normalizeExamSubjects, subscribeToExamChanges } from '../../utils/examStore';
 
 const StudentInstitutionExams = () => {
-  const [subjects, setSubjects] = useState(() => normalizeExamSubjects(getStoredExams()));
+  const [subjects, setSubjects] = useState([]);
   const [studentName, setStudentName] = useState('Student');
   const [studentId, setStudentId] = useState('STD-001');
   const [loading, setLoading] = useState(true);
@@ -28,26 +28,11 @@ const StudentInstitutionExams = () => {
         }
       }
 
-      // Fetch from student / institution endpoints
-      let res = await fetch('/api/student/exams', { credentials: 'include' });
+      // Fetch from backend-authorized student exams endpoint exclusively
+      const res = await fetch('/api/student/exams', { credentials: 'include' });
       let data = null;
-
       if (res.ok) {
         data = await res.json().catch(() => null);
-      }
-
-      if (!data) {
-        res = await fetch('/api/student/institution/exams', { credentials: 'include' });
-        if (res.ok) {
-          data = await res.json().catch(() => null);
-        }
-      }
-
-      if (!data) {
-        res = await fetch('/api/institution/content/exams', { credentials: 'include' });
-        if (res.ok) {
-          data = await res.json().catch(() => null);
-        }
       }
 
       const fetchedList = [];
@@ -69,37 +54,9 @@ const StudentInstitutionExams = () => {
           fetchedList.push(...data);
         }
       }
-      const mergedList = mergeExamsWithLocal(fetchedList);
 
-      const studentInstName = String(profile?.institution_name || profile?.institution_code || profile?.join_code || '').toLowerCase().trim();
-      const studentInstId = String(profile?.institution_id || profile?.join_code || '').toLowerCase().trim();
-
-      const filteredList = mergedList.filter(ex => {
-        if (!ex) return false;
-        if (ex.is_published === false) return false;
-
-        const exInstId = String(ex.institution_id || ex.created_by_institution_id || '').toLowerCase().trim();
-        const exInstName = String(ex.institution_name || ex.created_by_institution_name || '').toLowerCase().trim();
-
-        // System/admin seed exams MUST NOT appear on institution platform
-        if (ex.created_by_type === 'system' || ex.created_by_type === 'admin' || exInstId === 'system' || exInstId === 'admin') {
-          return false;
-        }
-
-        // If student profile specifies a particular institution ID/name, match against it
-        if (studentInstId || studentInstName) {
-          const matchId = studentInstId && exInstId && (studentInstId === exInstId || studentInstId.includes(exInstId) || exInstId.includes(studentInstId));
-          const matchName = studentInstName && exInstName && (studentInstName === exInstName || studentInstName.includes(exInstName) || exInstName.includes(studentInstName));
-          if (exInstId || exInstName) {
-            return Boolean(matchId || matchName);
-          }
-        }
-
-        // If student profile has no institution filter or exam was created on institution platform, include it
-        return true;
-      });
-
-      const parsedSubjects = normalizeExamSubjects(filteredList);
+      const publishedList = fetchedList.filter(ex => ex && ex.is_published !== false);
+      const parsedSubjects = normalizeExamSubjects(publishedList);
       setSubjects(parsedSubjects);
     } catch (err) {
       console.error('Error fetching institution exams:', err);

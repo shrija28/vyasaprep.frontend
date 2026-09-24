@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getAdminCache, setAdminCache, clearAdminCache } from '../../utils/adminCache';
 
 const AdminInstitutions = () => {
-  const [institutions, setInstitutions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const cachedInst = getAdminCache('admin_institutions_data');
+  const [institutions, setInstitutions] = useState(() => cachedInst || []);
+  const [loading, setLoading] = useState(() => !cachedInst);
   const [error, setError] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
 
   const fetchInstitutions = async () => {
-    setLoading(true);
+    if (!getAdminCache('admin_institutions_data')) {
+      setLoading(true);
+    }
     setError('');
     try {
       const res = await fetch('/api/admin/institutions', { credentials: 'include' });
@@ -16,12 +20,17 @@ const AdminInstitutions = () => {
         const data = await res.json();
         const list = data.institutions || (Array.isArray(data) ? data : []);
         setInstitutions(list);
+        setAdminCache('admin_institutions_data', list);
       } else {
-        setError('Failed to fetch institutions');
+        if (!getAdminCache('admin_institutions_data')) {
+          setError('Failed to fetch institutions');
+        }
       }
     } catch (err) {
       console.error('Error fetching institutions:', err);
-      setError('Network error loading institutions');
+      if (!getAdminCache('admin_institutions_data')) {
+        setError('Network error loading institutions');
+      }
     } finally {
       setLoading(false);
     }
@@ -41,6 +50,8 @@ const AdminInstitutions = () => {
         body: JSON.stringify({ status: newStatus })
       });
       if (res.ok) {
+        clearAdminCache('admin_institutions_data');
+        clearAdminCache('admin_dashboard_data');
         fetchInstitutions();
       }
     } catch (err) {

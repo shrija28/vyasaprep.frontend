@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { getAdminCache, setAdminCache, clearAdminCache } from '../../utils/adminCache';
 
 const AdminQuestions = () => {
-  const [questions, setQuestions] = useState([]);
-  const [counts, setCounts] = useState({});
   const [filterSubject, setFilterSubject] = useState("");
   const [filterSource, setFilterSource] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalQuestions, setTotalQuestions] = useState(0);
   const [pageSize, setPageSize] = useState(15);
-  const [loading, setLoading] = useState(false);
+
+  const initialCacheKey = `admin_questions_${currentPage}_${pageSize}_${filterSubject}_${filterSource}`;
+  const cachedData = getAdminCache(initialCacheKey);
+
+  const [questions, setQuestions] = useState(() => cachedData?.questions || []);
+  const [counts, setCounts] = useState(() => cachedData?.counts || {});
+  const [totalQuestions, setTotalQuestions] = useState(() => cachedData?.totalQuestions || 0);
+  const [loading, setLoading] = useState(() => !cachedData);
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
@@ -18,20 +23,18 @@ const AdminQuestions = () => {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearing, setClearing] = useState(false);
 
-  const fetchCounts = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/questions/counts', { credentials: 'include' });
-      const data = await res.json();
-      if (res.ok && data.counts) {
-        setCounts(data.counts);
-      }
-    } catch (err) {
-      console.error('Failed to fetch counts', err);
-    }
-  }, []);
-
   const fetchQuestions = useCallback(async () => {
-    setLoading(true);
+    const key = `admin_questions_${currentPage}_${pageSize}_${filterSubject}_${filterSource}`;
+    const cached = getAdminCache(key);
+
+    if (cached) {
+      setQuestions(cached.questions || []);
+      setTotalQuestions(cached.totalQuestions || 0);
+      setCounts(cached.counts || {});
+    } else {
+      setLoading(true);
+    }
+
     try {
       const params = new URLSearchParams();
       params.append('page', currentPage);
@@ -42,11 +45,19 @@ const AdminQuestions = () => {
       const res = await fetch(`/api/admin/questions?${params.toString()}`, { credentials: 'include' });
       const data = await res.json();
       if (res.ok && data.questions) {
-        setQuestions(data.questions);
-        setTotalQuestions(data.total || 0);
-        if (data.counts_by_subject) {
-          setCounts(data.counts_by_subject);
-        }
+        const fetchedQuestions = data.questions;
+        const fetchedTotal = data.total || 0;
+        const fetchedCounts = data.counts_by_subject || data.counts || {};
+
+        setQuestions(fetchedQuestions);
+        setTotalQuestions(fetchedTotal);
+        setCounts(fetchedCounts);
+
+        setAdminCache(key, {
+          questions: fetchedQuestions,
+          totalQuestions: fetchedTotal,
+          counts: fetchedCounts
+        });
       }
     } catch (err) {
       console.error('Failed to fetch questions', err);
@@ -54,10 +65,6 @@ const AdminQuestions = () => {
       setLoading(false);
     }
   }, [currentPage, pageSize, filterSubject, filterSource]);
-
-  useEffect(() => {
-    fetchCounts();
-  }, [fetchCounts]);
 
   useEffect(() => {
     fetchQuestions();
@@ -79,8 +86,8 @@ const AdminQuestions = () => {
       });
       if (res.ok) {
         setDeleteId(null);
+        clearAdminCache();
         fetchQuestions();
-        fetchCounts();
       } else {
         const data = await res.json().catch(() => ({}));
         alert(data.message || 'Failed to delete question');
@@ -105,8 +112,8 @@ const AdminQuestions = () => {
       if (res.ok) {
         setShowClearConfirm(false);
         setCurrentPage(1);
+        clearAdminCache();
         fetchQuestions();
-        fetchCounts();
       } else {
         const data = await res.json().catch(() => ({}));
         alert(data.message || 'Failed to clear questions');

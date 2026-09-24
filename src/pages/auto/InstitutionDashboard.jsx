@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { getStoredExams, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
+import { subscribeToExamChanges } from '../../utils/examStore';
 
 const InstitutionDashboard = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [batches, setBatches] = useState([]);
-  const [exams, setExams] = useState(getStoredExams());
+  const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState('');
@@ -36,17 +36,17 @@ const InstitutionDashboard = () => {
         fetchedList = eData.exams || eData.data || (Array.isArray(eData) ? eData : []);
       }
       const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-      const merged = mergeExamsWithLocal(fetchedList).map(ex => {
+      const processed = fetchedList.map(ex => {
         const subMatches = localSubs.filter(s => s.exam_set_id === ex.exam_id || s.exam_id === ex.exam_id || (ex.sets || []).some(st => st.exam_set_id === s.exam_set_id));
         const totalCompletions = Math.max(ex.completion_count || 0, subMatches.length);
         return { ...ex, completion_count: totalCompletions };
       });
-      setExams(merged);
+      setExams(processed);
 
       setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch (err) {
       if (!isSilent) setError('Unable to load dashboard data');
-      setExams(getStoredExams());
+      setExams([]);
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -54,8 +54,8 @@ const InstitutionDashboard = () => {
 
   useEffect(() => {
     fetchDashboard(false);
-    const unsubscribe = subscribeToExamChanges((updatedList) => {
-      setExams(updatedList);
+    const unsubscribe = subscribeToExamChanges(() => {
+      fetchDashboard(true);
     });
 
     const handleUpdate = () => {

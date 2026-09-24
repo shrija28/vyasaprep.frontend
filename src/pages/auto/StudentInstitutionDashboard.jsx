@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getStoredExams, mergeExamsWithLocal, subscribeToExamChanges } from '../../utils/examStore';
+import { subscribeToExamChanges } from '../../utils/examStore';
 import { generateStudentId, extractStudentName } from '../../utils/studentId';
 
 const MOCK_COLLEGES = {
@@ -19,7 +19,7 @@ const MOCK_COLLEGES = {
 };
 
 const StudentInstitutionDashboard = () => {
-  const [activeExams, setActiveExams] = useState(() => getStoredExams().filter(e => e.is_published !== false));
+  const [activeExams, setActiveExams] = useState([]);
   const [studentName, setStudentName] = useState(() => extractStudentName(null));
   const [studentId, setStudentId] = useState('—');
   const [institutionName, setInstitutionName] = useState('Institution');
@@ -96,13 +96,12 @@ const StudentInstitutionDashboard = () => {
 
   useEffect(() => {
     loadDashboardData();
-    const unsubscribe = subscribeToExamChanges((updatedList) => {
-      setActiveExams(updatedList.filter(e => e.is_published !== false));
+    const unsubscribe = subscribeToExamChanges(() => {
+      loadDashboardData();
     });
 
     const handleUpdate = () => {
       loadDashboardData();
-      setActiveExams(getStoredExams().filter(e => e.is_published !== false));
       setLastUpdated(new Date().toLocaleTimeString());
     };
 
@@ -124,7 +123,6 @@ const StudentInstitutionDashboard = () => {
     setRefreshing(true);
     loadDashboardData();
     setTimeout(() => {
-      setActiveExams(getStoredExams().filter(e => e.is_published !== false));
       setLastUpdated(new Date().toLocaleTimeString());
       setRefreshing(false);
     }, 400);

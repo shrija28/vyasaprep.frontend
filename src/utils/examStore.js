@@ -3,7 +3,39 @@
  * Manages persistent storage, API merging, subject grouping, and dynamic event broadcasting.
  */
 
-const STORAGE_KEY = 'vyasaprep_institution_exams';
+const getActiveStorageKey = () => {
+  try {
+    const rawUser = localStorage.getItem('user');
+    if (rawUser) {
+      const u = JSON.parse(rawUser);
+      if (u && typeof u === 'object') {
+        const scopeId = String(
+          u.institution_id ||
+          u.institution_code ||
+          u.join_code ||
+          u.id ||
+          u.kcet_student_id ||
+          u.email ||
+          ''
+        ).toLowerCase().trim();
+
+        if (scopeId) {
+          return `vyasaprep_institution_exams_${scopeId}`;
+        }
+      }
+    }
+
+    const activeStudentId = localStorage.getItem('vyasaprep_active_student_id');
+    if (activeStudentId && String(activeStudentId).trim()) {
+      const scopeId = String(activeStudentId).toLowerCase().trim();
+      return `vyasaprep_institution_exams_${scopeId}`;
+    }
+  } catch (e) {
+    console.error('Error determining scoped storage key:', e);
+  }
+
+  return 'vyasaprep_institution_exams_guest';
+};
 
 export const isAuthenticAdminExam = (exam) => {
   if (!exam || typeof exam !== 'object') return false;
@@ -65,7 +97,8 @@ const DEFAULT_SEED_EXAMS = [
 
 export const getStoredExams = () => {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const key = getActiveStorageKey();
+    const saved = localStorage.getItem(key);
     if (!saved) {
       return [];
     }
@@ -73,7 +106,7 @@ export const getStoredExams = () => {
     if (Array.isArray(parsed)) {
       const filtered = parsed.filter(isAuthenticAdminExam);
       if (filtered.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+        localStorage.setItem(key, JSON.stringify(filtered));
       }
       return filtered;
     }
@@ -86,8 +119,9 @@ export const getStoredExams = () => {
 
 export const saveStoredExams = (newList) => {
   try {
+    const key = getActiveStorageKey();
     const cleanList = (newList || []).filter(isAuthenticAdminExam);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cleanList));
+    localStorage.setItem(key, JSON.stringify(cleanList));
     window.dispatchEvent(new CustomEvent('exam-updated', { detail: { exams: cleanList } }));
     window.dispatchEvent(new Event('exam-created'));
     localStorage.setItem('vyasaprep_last_exam_created', String(Date.now()));
