@@ -1,12 +1,53 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
 
 const AdminSyllabus = () => {
+  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterPuc, setFilterPuc] = useState('');
+
+  const fetchSyllabus = async () => {
+    setLoading(true);
+    setError('');
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
+    try {
+      const res = await fetch('/api/admin/syllabus', { credentials: 'include', signal: controller.signal });
+      if (!res.ok) throw new Error(`Unable to load syllabus (HTTP ${res.status}) from /api/admin/syllabus.`);
+      const data = await res.json();
+      if (!Array.isArray(data.subjects)) throw new Error('Unable to parse syllabus data from /api/admin/syllabus.');
+      setSubjects(data.subjects);
+    } catch (err) {
+      console.error('Failed to load admin syllabus:', err);
+      setError(err.name === 'AbortError' ? 'Unable to load syllabus chapters. Please try again.' : 'Unable to load syllabus chapters. Please try again.');
+      setSubjects([]);
+    } finally {
+      window.clearTimeout(timeoutId);
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchSyllabus(); }, []);
+
+  const chapters = useMemo(() => subjects.flatMap(subject => (subject.puc_years || []).flatMap(puc => (puc.chapters || []).map(chapter => ({ ...chapter, subject: subject.subject, puc_year: puc.puc_year })))), [subjects]);
+  const filteredChapters = chapters.filter(chapter => {
+    if (filterSubject && chapter.subject !== filterSubject) return false;
+    if (filterPuc && chapter.puc_year !== filterPuc) return false;
+    return true;
+  });
+  const subjectCounts = subjects.reduce((result, subject) => {
+    result[subject.subject] = (subject.puc_years || []).reduce((total, puc) => total + (puc.chapters || []).length, 0);
+    return result;
+  }, {});
   return (
     <>
       {/* Auto-injected styles from HTML head */}
       <style dangerouslySetInnerHTML={{ __html: `
-    .topic-badge { display:inline-block;padding:2px 8px;border-radius:8px;font-size:0.72rem;font-weight:700; }
+    .admin-syllabus-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+    .admin-syllabus-wrap h2,.admin-syllabus-wrap h3 { color:#0f172a !important; }
+    .admin-syllabus-wrap .section-sub { color:#475569 !important; }
+    .admin-syllabus-wrap .table-scroll { width:100%;max-width:100%;overflow-x:auto; }
     .badge-1puc { background:rgba(37,99,235,0.15);color:#60a5fa; }
     .badge-2puc { background:rgba(124,58,237,0.15);color:#a78bfa; }
     .badge-inactive { background:rgba(107,114,128,0.15);color:var(--muted); }
@@ -20,6 +61,27 @@ const AdminSyllabus = () => {
     .syllabus-table col.col-name  { width:32%; }
     .syllabus-table col.col-desc  { width:28%; }
     .syllabus-table col.col-act   { width:10%; }
+    .syllabus-table { min-width:900px; }
+    @media (max-width:900px) {
+      .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; }
+      .navbar .nav-brand { flex:0 0 auto; }
+      .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+      .navbar .nav-links::-webkit-scrollbar { display:none; }
+      .navbar .nav-actions { flex:0 0 auto; }
+      .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+      .admin-syllabus-wrap { padding-left:16px !important;padding-right:16px !important; }
+    }
+    @media (max-width:560px) {
+      .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; }
+      .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+      .admin-syllabus-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+      .admin-syllabus-wrap .section-card-header { align-items:flex-start !important;flex-wrap:wrap; }
+      .admin-syllabus-wrap .section-card-header > div:last-child { margin-left:0 !important;width:100%;display:flex;gap:8px; }
+      .admin-syllabus-wrap .section-card-header > div:last-child button { flex:1;min-width:0; }
+      .admin-syllabus-wrap .filter-row { display:grid !important;grid-template-columns:1fr 1fr;gap:10px !important; }
+      .admin-syllabus-wrap .filter-row > div { min-width:0; }
+      .admin-syllabus-wrap .filter-row select { width:100%;min-width:0; }
+    }
   
 ` }} />
       
@@ -28,7 +90,7 @@ const AdminSyllabus = () => {
   
   
 
-  <div className="main-wrap">
+  <div className="main-wrap admin-syllabus-wrap">
 
     
     <div className="section-card">
@@ -40,7 +102,7 @@ const AdminSyllabus = () => {
           <h2>KCET Syllabus Management</h2>
           <p className="section-sub">Official Karnataka PUC syllabus — 1st &amp; 2nd PUC chapters for all 4 subjects · Source: KEA / DPUE Karnataka</p>
         </div>
-        <div style={{"marginLeft":"auto"}}>
+          <div style={{"marginLeft":"auto"}}>
           <button className="btn-outline small" id="bulkTextbookBtn"  style={{"marginRight":"8px"}}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{"width":"14px","height":"14px"}}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Upload Textbooks
@@ -53,14 +115,18 @@ const AdminSyllabus = () => {
       </div>
       <div className="section-body" style={{"paddingBottom":"0"}}>
         
+        {error && <div role="alert" style={{ marginBottom: '16px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(220,38,38,0.1)', border: '1px solid #dc2626', color: '#991b1b', fontSize: '0.85rem' }}>{error}</div>}
         <div id="countTiles" style={{"display":"grid","gridTemplateColumns":"repeat(auto-fit,minmax(140px,1fr))","gap":"10px","marginBottom":"16px"}}>
-          <div style={{"textAlign":"center","color":"var(--muted)","padding":"16px"}}>Loading…</div>
+          {loading ? <div style={{"textAlign":"center","color":"var(--muted)","padding":"16px"}}>Loading syllabus chapters...</div> : error ? null : <>
+            <div style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '8px' }}><strong style={{ fontSize: '1.5rem', color: '#0f172a' }}>{chapters.length}</strong><div style={{ color: '#475569', fontSize: '0.75rem' }}>Total Chapters</div></div>
+            {Object.entries(subjectCounts).map(([name, count]) => <div key={name} style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '8px' }}><strong style={{ fontSize: '1.5rem', color: '#0f172a' }}>{count}</strong><div style={{ color: '#475569', fontSize: '0.75rem' }}>{name}</div></div>)}
+          </>}
         </div>
         
-        <div style={{"display":"flex","gap":"12px","flexWrap":"wrap","marginBottom":"16px"}}>
+        <div className="filter-row" style={{"display":"flex","gap":"12px","flexWrap":"wrap","marginBottom":"16px"}}>
           <div className="input-group" style={{"margin":"0"}}>
             <label className="input-label" htmlFor="filterSubject">Subject</label>
-            <select id="filterSubject" className="text-input">
+            <select id="filterSubject" className="text-input" value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} disabled={loading}>
               <option value="">All Subjects</option>
               <option>Biology</option><option>Chemistry</option>
               <option>Mathematics</option><option>Physics</option>
@@ -68,21 +134,13 @@ const AdminSyllabus = () => {
           </div>
           <div className="input-group" style={{"margin":"0"}}>
             <label className="input-label" htmlFor="filterPUC">PUC Year</label>
-            <select id="filterPUC" className="text-input">
+            <select id="filterPUC" className="text-input" value={filterPuc} onChange={(e) => setFilterPuc(e.target.value)} disabled={loading}>
               <option value="">Both PUC</option>
               <option>1st PUC</option><option>2nd PUC</option>
             </select>
           </div>
-          <div className="input-group" style={{"margin":"0"}}>
-            <label className="input-label" htmlFor="filterActive">Status</label>
-            <select id="filterActive" className="text-input">
-              <option value="">All</option>
-              <option value="active">Active only</option>
-              <option value="inactive">Inactive only</option>
-            </select>
-          </div>
           <div style={{"marginTop":"18px"}}>
-            <button className="btn-outline small" id="refreshBtn">Refresh</button>
+            <button className="btn-outline small" id="refreshBtn" onClick={fetchSyllabus}>Refresh</button>
           </div>
         </div>
       </div>
@@ -103,12 +161,12 @@ const AdminSyllabus = () => {
               </tr>
             </thead>
             <tbody id="topicTableBody">
-              <tr><td colspan="7" style={{"textAlign":"center","color":"var(--muted)","padding":"40px"}}>Loading…</td></tr>
+              {loading ? <tr><td colSpan="7" style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px' }}>Loading syllabus chapters...</td></tr> : error ? <tr><td colSpan="7" style={{ textAlign: 'center', color: '#991b1b', padding: '40px' }}>Unable to load syllabus chapters. Please try again.</td></tr> : filteredChapters.length === 0 ? <tr><td colSpan="7" style={{ textAlign: 'center', color: 'var(--muted)', padding: '40px' }}>No syllabus chapters found.</td></tr> : filteredChapters.map((chapter, index) => <tr key={chapter.id || `${chapter.subject}-${chapter.puc_year}-${chapter.chapter_number}-${index}`}><td>{index + 1}</td><td>{chapter.subject}</td><td>{chapter.puc_year}</td><td>{chapter.chapter_number || '—'}</td><td>{chapter.chapter_name || '—'}</td><td>{chapter.description || '—'}</td><td><span className={`topic-badge ${chapter.is_active === false ? 'badge-inactive' : 'badge-1puc'}`}>{chapter.is_active === false ? 'Inactive' : 'Active'}</span></td></tr>)}
             </tbody>
           </table>
         </div>
         <div style={{"padding":"12px 20px","borderTop":"1px solid var(--border)"}}>
-          <span id="tableFooter" style={{"fontSize":"0.82rem","color":"var(--muted)"}}>—</span>
+          <span id="tableFooter" style={{"fontSize":"0.82rem","color":"var(--muted)"}}>{loading ? 'Loading syllabus chapters...' : error ? 'Syllabus data unavailable.' : `Showing ${filteredChapters.length} of ${chapters.length} chapters`}</span>
         </div>
       </div>
     </div>
@@ -161,7 +219,7 @@ const AdminSyllabus = () => {
           </div>
         </div>
         <div style={{"display":"flex","alignItems":"center","gap":"8px"}}>
-          <input type="checkbox" id="mActive" checked style={{"width":"16px","height":"16px","cursor":"pointer"}}/>
+          <input type="checkbox" id="mActive" defaultChecked style={{"width":"16px","height":"16px","cursor":"pointer"}}/>
           <label htmlFor="mActive" style={{"fontSize":"0.85rem","cursor":"pointer"}}>Active (visible to students and institutions)</label>
         </div>
       </div>

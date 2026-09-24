@@ -15,6 +15,7 @@ const AdminQuestions = () => {
   const [counts, setCounts] = useState(() => cachedData?.counts || {});
   const [totalQuestions, setTotalQuestions] = useState(() => cachedData?.totalQuestions || 0);
   const [loading, setLoading] = useState(() => !cachedData);
+  const [error, setError] = useState('');
   const [deleteId, setDeleteId] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
@@ -34,6 +35,7 @@ const AdminQuestions = () => {
     } else {
       setLoading(true);
     }
+    setError('');
 
     try {
       const params = new URLSearchParams();
@@ -44,7 +46,10 @@ const AdminQuestions = () => {
 
       const res = await fetch(`/api/admin/questions?${params.toString()}`, { credentials: 'include' });
       const data = await res.json();
-      if (res.ok && data.questions) {
+      if (!res.ok) {
+        throw new Error(`Unable to load questions (HTTP ${res.status}) from /api/admin/questions.`);
+      }
+      if (data.questions) {
         const fetchedQuestions = data.questions;
         const fetchedTotal = data.total || 0;
         const fetchedCounts = data.counts_by_subject || data.counts || {};
@@ -61,6 +66,7 @@ const AdminQuestions = () => {
       }
     } catch (err) {
       console.error('Failed to fetch questions', err);
+      setError(err.message || 'Unable to load questions from /api/admin/questions.');
     } finally {
       setLoading(false);
     }
@@ -130,9 +136,44 @@ const AdminQuestions = () => {
 
   return (
     <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .admin-questions-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+        .admin-questions-wrap h2,.admin-questions-wrap h3 { color:#0f172a !important; }
+        .admin-questions-wrap .section-sub { color:#475569 !important; }
+        .admin-questions-wrap .filter-row { min-width:0; }
+        .admin-questions-wrap .filter-group { min-width:0; }
+        .admin-questions-wrap .select-input { max-width:100%; }
+        .admin-questions-wrap .question-actions { flex-wrap:wrap;justify-content:flex-end; }
+        .admin-questions-wrap .question-copy { min-width:0; }
+        .admin-questions-wrap .question-copy p { overflow-wrap:anywhere;word-break:break-word; }
+        .admin-questions-wrap .question-pagination { flex-wrap:wrap;gap:10px; }
+        @media (max-width:900px) {
+          .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; }
+          .navbar .nav-brand { flex:0 0 auto; }
+          .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+          .navbar .nav-links::-webkit-scrollbar { display:none; }
+          .navbar .nav-actions { flex:0 0 auto; }
+          .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+          .admin-questions-wrap { padding-left:16px !important;padding-right:16px !important; }
+        }
+        @media (max-width:560px) {
+          .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; }
+          .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+          .admin-questions-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+          .admin-questions-wrap .filter-row { display:grid !important;grid-template-columns:1fr 1fr;gap:10px !important; }
+          .admin-questions-wrap .filter-group { width:100%; }
+          .admin-questions-wrap .filter-group select { width:100%;min-width:0 !important; }
+          .admin-questions-wrap .filter-row > div:last-child { grid-column:1 / -1;margin-left:0 !important; }
+          .admin-questions-wrap .results-header { align-items:flex-start !important;gap:8px;flex-wrap:wrap; }
+          .admin-questions-wrap .question-actions { width:100%;justify-content:flex-start;margin-top:8px; }
+          .admin-questions-wrap .question-pagination { align-items:stretch !important; }
+          .admin-questions-wrap .question-pagination > div { width:100%; }
+          .admin-questions-wrap .question-pagination button { flex:1; }
+        }
+      ` }} />
       <div className="bg-mesh"></div>
       
-      <div className="main-wrap">
+      <div className="main-wrap admin-questions-wrap">
         <div className="section-card">
           <div className="section-card-header">
             <div className="section-icon purple">
@@ -145,6 +186,7 @@ const AdminQuestions = () => {
               </p>
             </div>
           </div>
+          {error && <div style={{ margin: '0 20px 16px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(220,38,38,0.1)', border: '1px solid #dc2626', color: '#991b1b', fontSize: '0.85rem' }}>{error}</div>}
           <div className="section-body">
             
             <div className="filter-row" style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -312,8 +354,8 @@ const AdminQuestions = () => {
                       transition: 'background 0.15s ease'
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                      <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                      <div className="question-copy" style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                           <span style={{ fontWeight: 'bold', color: 'var(--blue)', fontSize: '0.9rem' }}>
                             #{questionIndex}
@@ -344,7 +386,7 @@ const AdminQuestions = () => {
                         </p>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div className="question-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <button 
                           className="btn-outline small"
                           onClick={() => setExpandedId(isExpanded ? null : q.id)}
@@ -406,7 +448,7 @@ const AdminQuestions = () => {
           )}
 
           {totalQuestions > 0 && (
-            <div className="table-footer" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+            <div className="table-footer question-pagination" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
               <span id="totalInfo" style={{ fontSize: "0.82rem", color: "var(--muted)" }}>
                 Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, totalQuestions)} of {totalQuestions} entries
               </span>

@@ -10,24 +10,48 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineEleme
 
 const AdminDashboard = () => {
   const [data, setData] = useState(() => getAdminCache('admin_dashboard_data'));
+  const [loading, setLoading] = useState(!getAdminCache('admin_dashboard_data'));
+  const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(() => getAdminCache('admin_dashboard_data') ? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 
   const fetchAdminDashboardData = async () => {
+    setLoading(true);
+    setError('');
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 10000);
     try {
-      const dashRes = await fetch('/api/admin/dashboard', { credentials: 'include' });
-      if (dashRes.ok) {
-        const dashData = await dashRes.json();
-        if (dashData.kpis) {
-          setData(dashData);
-          setAdminCache('admin_dashboard_data', dashData);
-          setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-          return;
-        }
+      const dashRes = await fetch('/api/admin/dashboard', { credentials: 'include', signal: controller.signal });
+      if (!dashRes.ok) {
+        throw new Error(`Dashboard request failed (${dashRes.status})`);
+      }
+      const dashData = await dashRes.json();
+      if (dashData.overview) {
+        const overview = dashData.overview;
+        const formattedData = {
+          ...dashData,
+          kpis: {
+            institutions: overview.total_institutions ?? 0,
+            institutionsSub: `${overview.active_institutions ?? 0} active`,
+            students: overview.total_students ?? 0,
+            studentsSub: `${overview.direct_students ?? 0} direct · ${overview.institution_linked_students ?? 0} institution-linked`,
+            questions: overview.total_questions ?? 0,
+            questionsSub: `${overview.admin_questions ?? 0} admin · ${overview.institution_questions ?? 0} institution`,
+            exams: overview.total_exams ?? 0,
+            examsSub: `${overview.published_exams ?? 0} published`,
+            attempts: overview.total_exam_attempts ?? 0,
+            attemptsSub: `${overview.avg_score ?? 0}% average score`
+          }
+        };
+        setData(formattedData);
+        setAdminCache('admin_dashboard_data', formattedData);
+        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        return;
+      }
 
-        let totalInst = dashData.total_institutions ?? dashData.institutions_count ?? 0;
-        let totalStudents = dashData.total_students ?? dashData.students_count ?? 0;
-        let totalQuestions = dashData.total_questions ?? dashData.questions_count ?? 0;
-        let totalExams = dashData.total_exams ?? dashData.exams_count ?? 0;
+      let totalInst = dashData.total_institutions ?? dashData.institutions_count ?? 0;
+      let totalStudents = dashData.total_students ?? dashData.students_count ?? 0;
+      let totalQuestions = dashData.total_questions ?? dashData.questions_count ?? 0;
+      let totalExams = dashData.total_exams ?? dashData.exams_count ?? 0;
 
         // Only fetch fallbacks if required counts are missing from dashboard response
         const needsInst = totalInst === 0;
@@ -73,12 +97,15 @@ const AdminDashboard = () => {
           }
         };
 
-        setData(formattedData);
-        setAdminCache('admin_dashboard_data', formattedData);
-        setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-      }
+      setData(formattedData);
+      setAdminCache('admin_dashboard_data', formattedData);
+      setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     } catch (err) {
       console.error('Failed to fetch admin dashboard:', err);
+      setError(err.name === 'AbortError' ? 'Dashboard request timed out. Check /api/admin/dashboard.' : (err.message || 'Unable to load the admin dashboard.'));
+    } finally {
+      window.clearTimeout(timeoutId);
+      setLoading(false);
     }
   };
 
@@ -95,29 +122,85 @@ const AdminDashboard = () => {
     }
   };
 
+  const qChartSubjects = data?.question_bank?.admin_by_subject || {};
   const qChartData = {
-    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    labels: Object.keys(qChartSubjects),
     datasets: [{
       label: 'Questions Uploaded',
-      data: [120, 190, 300, 500, 200, 300],
+      data: Object.values(qChartSubjects),
       borderColor: '#06b6d4', backgroundColor: 'rgba(6, 182, 212, 0.1)',
       fill: true, tension: 0.4
     }]
   };
 
+  const examsBySubject = data?.exams?.by_subject || {};
   const examsChartData = {
-    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    labels: Object.keys(examsBySubject),
     datasets: [{
       label: 'Exams Taken',
-      data: [12, 19, 3, 5, 2, 3, 9],
+      data: Object.values(examsBySubject),
       backgroundColor: 'rgba(124, 58, 237, 0.8)',
       borderRadius: 4
     }]
   };
 
+  const formatDate = (value) => value ? new Date(value).toLocaleDateString() : '—';
+  const sectionMessage = (items, emptyMessage) => {
+    if (loading && !data) return 'Loading…';
+    if (error && !data) return 'Unable to load this section.';
+    if (!items?.length) return emptyMessage;
+    return null;
+  };
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
+    .admin-dashboard-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+    .admin-dashboard-wrap > * { min-width:0; }
+    .admin-dashboard-wrap h1 { color:#0f172a !important; }
+    .admin-dashboard-wrap h3 { color:#0f172a !important; }
+    .admin-dashboard-wrap .section-sub { color:#475569 !important; }
+    .admin-dashboard-wrap > div:first-of-type > div > p { color:#475569 !important; }
+    .admin-dashboard-wrap .section-card { min-width:0;overflow:hidden; }
+    .admin-dashboard-wrap .results-table { min-width:560px; }
+    .admin-dashboard-wrap .section-body:has(.results-table) { overflow-x:auto; }
+    .admin-dashboard-wrap .chart-body { height:220px;min-height:220px;position:relative; }
+    .admin-dashboard-wrap .chart-body > canvas { max-width:100%; }
+    .dashboard-state { color:var(--muted);text-align:center;padding:24px 16px; }
+    .dashboard-email { max-width:260px;overflow-wrap:anywhere;word-break:break-word; }
+    @media (max-width:900px) {
+      .navbar { min-width:0;overflow:hidden;padding:0 clamp(16px, 2vw, 32px);gap:8px; }
+      .navbar .nav-brand { flex:0 0 auto; }
+      .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+      .navbar .nav-links::-webkit-scrollbar { display:none; }
+      .navbar .nav-actions { flex:0 0 auto; }
+      .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+      .admin-dashboard-wrap { padding-left:16px !important;padding-right:16px !important; }
+      .quick-actions { align-items:stretch;padding:14px; }
+      .quick-actions-label { width:100%;margin-bottom:2px; }
+      .qa-btn { flex:1 1 calc(50% - 10px);justify-content:center;min-width:0;text-align:center; }
+      .charts-2col { gap:14px; }
+    }
+    @media (max-width:560px) {
+      .navbar .brand-name { font-size:0.95rem; }
+      .navbar .brand-ai { font-size:0.95rem; }
+      .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+      .admin-dashboard-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+      .admin-dashboard-wrap > div:first-of-type { align-items:flex-start !important;gap:12px; }
+      .admin-dashboard-wrap > div:first-of-type h1 { font-size:1.35rem !important; }
+      .admin-dashboard-wrap > div:first-of-type p { line-height:1.4; }
+      .admin-dashboard-wrap > div:first-of-type button { flex-shrink:0; }
+      .kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
+      .kpi-card { padding:14px; }
+      .kpi-card .kpi-val { font-size:1.65rem; }
+      .kpi-card .kpi-sub { overflow-wrap:anywhere; }
+      .quick-actions { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+      .quick-actions-label { grid-column:1 / -1; }
+      .qa-btn { min-height:40px;padding:8px 6px;font-size:0.74rem; }
+      .section-nav { align-items:flex-start;gap:10px; }
+      .section-nav h3 { line-height:1.3; }
+      .chart-body { height:190px !important;min-height:190px !important; }
+    }
     /* ── Clickable KPI cards ── */
     .kpi-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:14px;margin-bottom:24px; }
 
@@ -236,15 +319,15 @@ const AdminDashboard = () => {
   ` }} />
       <div className="bg-mesh"></div>
       
-      <div className="main-wrap">
+      <div className="main-wrap admin-dashboard-wrap">
 
     
     <div style={{"display":"flex","alignItems":"center","justifyContent":"space-between","marginBottom":"20px"}}>
       <div>
         <h1 style={{"fontSize":"1.6rem","fontWeight":"800","margin":"0 0 3px"}}>Platform Dashboard</h1>
-        <p style={{"color":"var(--muted)","margin":"0","fontSize":"0.82rem"}} id="lastUpdated">Loading…</p>
+        <p style={{"color":"var(--muted)"}} id="lastUpdated">{error ? error : lastUpdated ? `Updated ${lastUpdated}` : loading ? 'Loading dashboard data…' : 'No dashboard data available'}</p>
       </div>
-      <button className="btn-outline" id="refreshBtn" style={{"display":"flex","alignItems":"center","gap":"6px"}}>
+      <button className="btn-outline" id="refreshBtn" onClick={fetchAdminDashboardData} style={{"display":"flex","alignItems":"center","gap":"6px"}}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{"width":"14px","height":"14px"}}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
         Refresh
       </button>
@@ -283,7 +366,6 @@ const AdminDashboard = () => {
     <div id="alertsSection" style={{"marginBottom":"20px","display":"none"}}>
       <div style={{"display":"flex","alignItems":"center","justifyContent":"space-between","marginBottom":"8px"}}>
         <span style={{"fontSize":"0.72rem","textTransform":"uppercase","letterSpacing":"0.5px","color":"var(--muted)","fontWeight":"700"}}>⚠️ Alerts</span>
-        <Link to="/admin/subscriptions" className="view-all-link">Resolve All →</Link>
       </div>
       <div id="alertsList"></div>
     </div>
@@ -321,9 +403,9 @@ const AdminDashboard = () => {
       </Link>
       <Link to="/admin/analytics" className="kpi-card">
         <div className="kpi-accent" style={{"background":"linear-gradient(90deg,#0891b2,#0d9488)"}}></div>
-        <div className="kpi-val" id="kpiAttempts">—</div>
+        <div className="kpi-val" id="kpiAttempts">{data ? data.kpis.attempts ?? 0 : '—'}</div>
         <div className="kpi-lbl">Exam Attempts</div>
-        <div className="kpi-sub" id="kpiAttemptsSub">—</div>
+        <div className="kpi-sub" id="kpiAttemptsSub">{data ? data.kpis.attemptsSub ?? 'Recorded attempts' : '—'}</div>
         <span className="kpi-arrow">→</span>
       </Link>
     </div>
@@ -341,7 +423,7 @@ const AdminDashboard = () => {
             <Link to="/admin/questions" className="view-all-link">Manage →</Link>
           </div>
         </div>
-        <div className="section-body" style={{"height":"220px"}}><div style={{ height: "300px" }}>{data && <Line data={qChartData} options={chartOptions} />}</div></div>
+        <div className="section-body chart-body">{data && qChartData.labels.length ? <Line data={qChartData} options={chartOptions} /> : <div className="dashboard-state">{sectionMessage([], 'No admin question-bank data')}</div>}</div>
       </div>
 
       
@@ -355,7 +437,7 @@ const AdminDashboard = () => {
             <Link to="/admin/exams" className="view-all-link">View All →</Link>
           </div>
         </div>
-        <div className="section-body" style={{"height":"220px"}}><div style={{ height: "300px" }}>{data && <Bar data={examsChartData} options={chartOptions} />}</div></div>
+        <div className="section-body chart-body">{data && examsChartData.labels.length ? <Bar data={examsChartData} options={chartOptions} /> : <div className="dashboard-state">{sectionMessage([], 'No exam subject data')}</div>}</div>
       </div>
     </div>
 
@@ -375,7 +457,11 @@ const AdminDashboard = () => {
         </div>
         <div className="section-body">
           <div id="instQList" style={{"display":"flex","flexDirection":"column"}}>
-            <div style={{"color":"var(--muted)","textAlign":"center","padding":"20px"}}>Loading…</div>
+            {(() => {
+              const items = data?.question_bank?.institution_by_institution || [];
+              const message = sectionMessage(items, 'No institution question banks');
+              return message ? <div className="dashboard-state">{message}</div> : items.map((item) => <Link key={item.name} to="/admin/institutions" className="inst-q-row"><span style={{ flex: 1, color: 'var(--text)' }}>{item.name}</span><strong style={{ color: 'var(--text)' }}>{item.count}</strong></Link>);
+            })()}
           </div>
         </div>
       </div>
@@ -393,7 +479,11 @@ const AdminDashboard = () => {
         </div>
         <div className="section-body" style={{"paddingTop":"4px"}}>
           <div id="activityList">
-            <div style={{"color":"var(--muted)","textAlign":"center","padding":"24px"}}>Loading…</div>
+            {(() => {
+              const items = data?.recent_activity || [];
+              const message = sectionMessage(items, 'No recent activity');
+              return message ? <div className="dashboard-state">{message}</div> : items.map((item) => <div key={item.id} className="activity-item"><span className="activity-dot" style={{ background: '#a78bfa' }} /><div><div className="activity-text">{item.title}</div><div className="activity-time">{item.subtitle} · {formatDate(item.timestamp)}</div></div></div>);
+            })()}
           </div>
         </div>
       </div>
@@ -414,7 +504,11 @@ const AdminDashboard = () => {
           <table className="results-table" id="recentInstTable">
             <thead><tr><th>Institution</th><th>Status</th><th>Joined</th></tr></thead>
             <tbody id="recentInstBody">
-              <tr><td colspan="3" style={{"textAlign":"center","color":"var(--muted)","padding":"24px"}}>Loading…</td></tr>
+              {(() => {
+                const items = data?.recent_institutions || [];
+                const message = sectionMessage(items, 'No recent institutions');
+                return message ? <tr><td colSpan="3" className="dashboard-state">{message}</td></tr> : items.map((item) => <tr key={item.id}><td>{item.name}</td><td>{item.status || '—'}</td><td>{formatDate(item.registered_at)}</td></tr>);
+              })()}
             </tbody>
           </table>
         </div>
@@ -426,8 +520,8 @@ const AdminDashboard = () => {
       <div className="section-card-header">
         <div className="section-nav">
           <div>
-            <h3 style={{"margin":"0","fontSize":"1rem"}}>Direct Subscriber Students</h3>
-            <p className="section-sub" style={{"margin":"0"}}>Personal/independent students</p>
+            <h3 style={{"margin":"0","fontSize":"1rem"}}>Direct Students</h3>
+            <p className="section-sub" style={{"margin":"0"}}>Personal/independent students · subscription/payment features currently inactive / future feature</p>
           </div>
         </div>
       </div>
@@ -443,10 +537,14 @@ const AdminDashboard = () => {
             </tr>
           </thead>
           <tbody id="directSubBody">
-            <tr><td colspan="5" style={{"textAlign":"center","color":"var(--muted)","padding":"24px"}}>Loading…</td></tr>
+            {(() => {
+              const items = data?.direct_students || [];
+              const message = sectionMessage(items, 'No direct students');
+              return message ? <tr><td colSpan="5" className="dashboard-state">{message}</td></tr> : items.map((item) => <tr key={item.id}><td>{item.name || '—'}</td><td>{item.kcet_student_id || '—'}</td><td className="dashboard-email">{item.email || '—'}</td><td>Free access</td><td>{formatDate(item.created_at)}</td></tr>);
+            })()}
           </tbody>
         </table>
-        <div className="table-footer" id="directSubFooter" style={{"textAlign":"center","padding":"8px","fontSize":"0.8rem","color":"var(--muted)"}}>—</div>
+        <div className="table-footer" id="directSubFooter" style={{"textAlign":"center","padding":"8px","fontSize":"0.8rem","color":"var(--muted)"}}>{data?.direct_students?.length ? `${data.direct_students.length} direct students` : '—'}</div>
       </div>
     </div>
 

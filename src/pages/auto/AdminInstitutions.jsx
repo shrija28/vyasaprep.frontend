@@ -67,8 +67,12 @@ const AdminInstitutions = () => {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
+    .admin-institutions-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+    .admin-institutions-wrap h1 { color:#0f172a !important; }
+    .admin-institutions-wrap .section-card { min-width:0;overflow:hidden; }
+    .admin-institutions-wrap .table-scroll { width:100%;max-width:100%;overflow-x:auto; }
     .inst-table td { white-space:normal;word-break:break-word;vertical-align:top; }
-    .inst-table { table-layout:fixed; }
+    .inst-table { table-layout:fixed;min-width:860px; }
     .inst-table col.col-name   { width:24%; }
     .inst-table col.col-status { width:11%; }
     .inst-table col.col-stud   { width:10%; }
@@ -76,11 +80,28 @@ const AdminInstitutions = () => {
     .inst-table col.col-exams  { width:10%; }
     .inst-table col.col-renew  { width:15%; }
     .inst-table col.col-acts   { width:20%; }
+    @media (max-width:900px) {
+      .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; }
+      .navbar .nav-brand { flex:0 0 auto; }
+      .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+      .navbar .nav-links::-webkit-scrollbar { display:none; }
+      .navbar .nav-actions { flex:0 0 auto; }
+      .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+      .admin-institutions-wrap { padding-left:16px !important;padding-right:16px !important; }
+    }
+    @media (max-width:560px) {
+      .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; }
+      .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+      .admin-institutions-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+      .admin-institutions-wrap > div:first-child { align-items:flex-start !important;gap:12px; }
+      .admin-institutions-wrap > div:first-child h1 { font-size:1.35rem !important; }
+      .admin-institutions-wrap > div:first-child button { flex-shrink:0; }
+    }
   ` }} />
       
       <div className="bg-mesh"></div>
 
-      <div className="main-wrap" style={{ maxWidth: '100%', padding: '24px 28px 80px' }}>
+      <div className="main-wrap admin-institutions-wrap" style={{ maxWidth: '100%', padding: '24px 28px 80px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
             <h1 style={{ fontSize: '1.6rem', fontWeight: '800', margin: '0 0 3px' }}>Institution Management</h1>
@@ -158,9 +179,9 @@ const AdminInstitutions = () => {
                   ) : (
                     filteredList.map((inst) => {
                       const studentCount = inst.total_students ?? inst.students_count ?? inst.student_count ?? (Array.isArray(inst.students) ? inst.students.length : 0);
-                      const questionCount = inst.total_questions ?? inst.questions_count ?? 0;
-                      const examCount = inst.total_exams ?? inst.exams_count ?? 0;
-                      const status = (inst.status || 'active').toLowerCase();
+                      const questionCount = inst.total_questions ?? inst.questions_count ?? inst.question_count ?? 0;
+                      const examCount = inst.total_exams ?? inst.exams_count ?? inst.exam_count ?? 0;
+                      const status = (inst.status || inst.institution_status || 'active').toLowerCase();
 
                       return (
                         <tr key={inst.institution_id || inst.id || inst.code}>
@@ -181,7 +202,7 @@ const AdminInstitutions = () => {
                           <td>{questionCount}</td>
                           <td>{examCount}</td>
                           <td style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                            {inst.renewal_date || inst.created_at || '—'}
+                            {inst.renewal_date || inst.next_renewal_date || inst.registered_at || inst.created_at || '—'}
                           </td>
                           <td>
                             <button 

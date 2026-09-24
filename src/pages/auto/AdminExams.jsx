@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { deleteStoredExam } from '../../utils/examStore';
-import { generate4SetsOf60Questions, generate60QuestionsForSet } from '../../utils/questionGenerator';
 import { getAdminCache, setAdminCache, clearAdminCache } from '../../utils/adminCache';
 
 const AdminExams = () => {
@@ -17,13 +16,23 @@ const AdminExams = () => {
   const [inspectExamId, setInspectExamId] = useState(null);
   const [inspectLoading, setInspectLoading] = useState(false);
   const [inspectData, setInspectData] = useState(null);
+  const [inspectError, setInspectError] = useState('');
   const [activeSetTab, setActiveSetTab] = useState(0);
+
+  const filteredExams = subject
+    ? exams.filter((exam) => String(exam.subject || '').toLowerCase() === subject.toLowerCase())
+    : exams;
 
   const fetchExams = async () => {
     try {
       const res = await fetch('/api/admin/exams', { credentials: 'include' });
       const data = await res.json();
-      if (res.ok && data) {
+      if (!res.ok) {
+        setMessage(`Unable to load exams (HTTP ${res.status}) from /api/admin/exams.`);
+        setIsError(true);
+        return;
+      }
+      if (data) {
         const rawList = data.exams || data.data || (Array.isArray(data) ? data : []);
         
         // Filter strictly by backend owner_type === "admin"
@@ -46,6 +55,8 @@ const AdminExams = () => {
       }
     } catch (err) {
       console.error('Failed to load exams', err);
+      setMessage('Unable to load exams. Check the /api/admin/exams endpoint.');
+      setIsError(true);
     }
   };
 
@@ -152,6 +163,7 @@ const AdminExams = () => {
     setInspectExamId(examId);
     setInspectLoading(true);
     setInspectData(null);
+    setInspectError('');
     setActiveSetTab(0);
 
     const targetExam = exams.find(e => e.id === examId || e.exam_id === examId || e.name === examId) || { id: examId, subject: 'Mathematics' };
@@ -189,13 +201,9 @@ const AdminExams = () => {
             explanation: q.explanation || ''
           }));
 
-          if (questions.length < 60) {
-            questions = generate60QuestionsForSet(examSubject, lbl);
-          }
-
           return {
             set_label: lbl,
-            question_count: 60,
+              question_count: questions.length,
             questions: questions
           };
         });
@@ -203,29 +211,15 @@ const AdminExams = () => {
         const formattedObj = {
           exam_name: data.exam_name || targetExam.name || targetExam.exam_name || `${examSubject} Mock Exam`,
           subject: data.subject || examSubject,
-          total_questions: 240,
+          total_questions: formattedSets.reduce((total, set) => total + set.questions.length, 0),
           sets: formattedSets
         };
         setInspectData(formattedObj);
       } else {
-        const fallbackSets = generate4SetsOf60Questions(examSubject);
-        const fallbackObj = {
-          exam_name: targetExam.name || targetExam.exam_name || `${examSubject} Mock Exam`,
-          subject: examSubject,
-          total_questions: 240,
-          sets: fallbackSets
-        };
-        setInspectData(fallbackObj);
+        setInspectError('No questions were returned for this exam by the API.');
       }
-    } catch {
-      const fallbackSets = generate4SetsOf60Questions(targetExam.subject || 'Mathematics');
-      const fallbackObj = {
-        exam_name: targetExam.name || targetExam.exam_name || `${targetExam.subject || 'Mathematics'} Mock Exam`,
-        subject: targetExam.subject || 'Mathematics',
-        total_questions: 240,
-        sets: fallbackSets
-      };
-      setInspectData(fallbackObj);
+    } catch (err) {
+      setInspectError('Unable to load exam questions from the API.');
     } finally {
       setInspectLoading(false);
     }
@@ -233,9 +227,35 @@ const AdminExams = () => {
 
   return (
     <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .admin-exams-wrap { width:100%;max-width:100%;box-sizing:border-box;min-width:0;overflow:hidden; }
+        .admin-exams-wrap h2,.admin-exams-wrap h3 { color:#0f172a !important; }
+        .admin-exams-wrap .section-sub { color:#475569 !important; }
+        .admin-exams-wrap .table-scroll { width:100%;max-width:100%;overflow-x:auto; }
+        .admin-exams-wrap .results-table { min-width:980px; }
+        .admin-exams-wrap .exam-actions { display:flex;gap:8px;flex-wrap:wrap;min-width:290px; }
+        @media (max-width:900px) {
+          .navbar { min-width:0;overflow:hidden;padding:0 12px;gap:8px; }
+          .navbar .nav-brand { flex:0 0 auto; }
+          .navbar .nav-links { flex:1 1 auto;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none; }
+          .navbar .nav-links::-webkit-scrollbar { display:none; }
+          .navbar .nav-actions { flex:0 0 auto; }
+          .navbar .nav-actions .btn { padding:6px 9px;font-size:0.75rem; }
+          .admin-exams-wrap { padding-left:16px !important;padding-right:16px !important; }
+        }
+        @media (max-width:560px) {
+          .navbar .brand-name,.navbar .brand-ai { font-size:0.95rem; }
+          .navbar .nav-pill { padding:6px 9px;font-size:0.76rem; }
+          .admin-exams-wrap { padding-top:18px !important;padding-bottom:48px !important; }
+          .admin-exams-wrap .section-card:first-child .section-body > div { align-items:stretch !important; }
+          .admin-exams-wrap .section-card:first-child .input-group { min-width:0 !important;width:100%; }
+          .admin-exams-wrap .section-card:first-child select { min-width:0 !important;width:100%; }
+          .admin-exams-wrap .section-card:first-child button { width:100%;justify-content:center; }
+        }
+      ` }} />
       <div className="bg-mesh"></div>
       
-      <div className="main-wrap">
+      <div className="main-wrap admin-exams-wrap">
         <div className="section-card">
           <div className="section-card-header">
             <div className="section-icon" style={{"background":"linear-gradient(135deg,rgba(124,58,237,0.2),rgba(37,99,235,0.2))"}}>
@@ -260,7 +280,7 @@ const AdminExams = () => {
                   onChange={(e) => setSubject(e.target.value)}
                   disabled={loading}
                 >
-                  <option value="" disabled>Select subject…</option>
+                  <option value="">All Subjects</option>
                   <option value="Biology">Biology</option>
                   <option value="Physics">Physics</option>
                   <option value="Chemistry">Chemistry</option>
@@ -270,7 +290,7 @@ const AdminExams = () => {
 
               <button className="btn-primary" onClick={handleCreateExam} disabled={loading} style={{ padding: "11px 24px" }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "16px", height: "16px" }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                {loading ? 'Creating Exam...' : '+ Create Exam'}
+                {loading ? 'Creating Exam...' : 'Create Exam'}
               </button>
             </div>
 
@@ -290,7 +310,7 @@ const AdminExams = () => {
               </div>
               <div>
                 <h2>All Created Exams</h2>
-                <p className="section-sub">{exams.length} of {exams.length} exams displayed</p>
+                <p className="section-sub">{filteredExams.length} of {exams.length} exams displayed</p>
               </div>
             </div>
           </div>
@@ -309,8 +329,8 @@ const AdminExams = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {exams.length > 0 ? (
-                    exams.map(exam => (
+                  {filteredExams.length > 0 ? (
+                    filteredExams.map(exam => (
                       <tr key={exam.id}>
                         <td style={{ fontWeight: 600, color: 'var(--blue)' }}>{exam.name}</td>
                         <td>
@@ -353,6 +373,7 @@ const AdminExams = () => {
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '8px' }}>
+                            <div className="exam-actions">
                             <button 
                               className="btn-outline small"
                               onClick={() => openInspectModal(exam.id)}
@@ -376,6 +397,7 @@ const AdminExams = () => {
                             >
                               Delete
                             </button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -383,7 +405,7 @@ const AdminExams = () => {
                   ) : (
                     <tr>
                       <td colSpan="7" style={{ "textAlign": "center", "color": "var(--muted)", "padding": "36px" }}>
-                        No admin exams created yet. Select a subject above and click "+ Create Exam".
+                        {subject ? `No ${subject} admin exams found.` : 'No admin exams created yet. Select a subject above and click "Create Exam".'}
                       </td>
                     </tr>
                   )}
@@ -453,9 +475,13 @@ const AdminExams = () => {
 
               {/* Modal Body */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
-                {inspectLoading || !inspectData ? (
+                {inspectLoading ? (
                   <div style={{ textAlign: 'center', padding: '50px', color: 'var(--muted)' }}>
                     ⏳ Loading exam sets and assigned questions...
+                  </div>
+                ) : inspectError ? (
+                  <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--red)' }}>
+                    {inspectError}
                   </div>
                 ) : (
                   <>
