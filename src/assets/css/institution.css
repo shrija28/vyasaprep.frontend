@@ -189,6 +189,20 @@
   flex-wrap: nowrap;
 }
 
+@media (max-width: 1360px) and (min-width: 1024px) {
+  .institution-nav .nav-links,
+  .institution-nav-links {
+    gap: 2px;
+  }
+
+  .institution-nav .nav-pill,
+  .institution-pill {
+    padding-left: 9px;
+    padding-right: 9px;
+    font-size: 0.8rem;
+  }
+}
+
 /* ── Institution Page Wrapper / Headings ───────────────────────────────────
    Shared styles for institution portal page content. Future task pages
    (dashboard, students, subscription) consume these.
@@ -214,6 +228,13 @@
   font-size: clamp(1.4rem, 3vw, 2rem);
   font-weight: 800;
   letter-spacing: -0.5px;
+  color: var(--text);
+}
+
+/* Institution cards use light surfaces; keep shared h2 defaults readable there. */
+.institution-portal h1,
+.institution-portal h2 {
+  color: var(--text);
 }
 
 .institution-page-title-accent {
@@ -583,6 +604,26 @@
   width: 100%;
   min-width: 640px;                     /* force scroll below 640px */
   border-collapse: collapse;
+}
+
+/* Keep narrow syllabus columns inside the viewport on phones. */
+.institution-page .section-card {
+  min-width: 0;
+}
+
+@media (max-width: 480px) {
+  .institution-page,
+  .main-wrap {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .institution-page input,
+  .institution-page select,
+  .main-wrap input,
+  .main-wrap select {
+    max-width: 100%;
+  }
 }
 
 /* ── Mobile: < 768px ──────────────────────────────────────────────────────

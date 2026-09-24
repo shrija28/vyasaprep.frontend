@@ -35,11 +35,8 @@ const InstitutionDashboard = () => {
         const eData = await examRes.json();
         fetchedList = eData.exams || eData.data || (Array.isArray(eData) ? eData : []);
       }
-      const localSubs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
       const processed = fetchedList.map(ex => {
-        const subMatches = localSubs.filter(s => s.exam_set_id === ex.exam_id || s.exam_id === ex.exam_id || (ex.sets || []).some(st => st.exam_set_id === s.exam_set_id));
-        const totalCompletions = Math.max(ex.completion_count || 0, subMatches.length);
-        return { ...ex, completion_count: totalCompletions };
+        return { ...ex, completion_count: Number(ex.completion_count || 0) };
       });
       setExams(processed);
 
@@ -151,8 +148,7 @@ const InstitutionDashboard = () => {
               </div>
               <div style={{ fontSize: '2.2rem', fontWeight: 700, color: 'var(--text)' }}>
                 {loading ? '—' : (() => {
-                  const subs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-                  return Math.max(subs.length, dashboardData?.total_submissions || 0);
+                  return Number(dashboardData?.total_submissions ?? dashboardData?.submissions_count ?? 0);
                 })()}
               </div>
               <span style={{ fontSize: '0.8rem', color: 'var(--purple-l)' }}>View Live Leaderboard →</span>
@@ -167,11 +163,7 @@ const InstitutionDashboard = () => {
               </div>
               <div style={{ fontSize: '2.2rem', fontWeight: 700, color: '#10b981' }}>
                 {loading ? '—' : (() => {
-                  const subs = JSON.parse(localStorage.getItem('vyasaprep_submissions') || '[]');
-                  if (subs.length === 0 && (!dashboardData || !dashboardData.average_score)) return '0.0%';
-                  const localAvg = subs.length > 0 ? Math.round(subs.reduce((a, b) => a + Number(b.percentage !== undefined ? b.percentage : (b.score || 0)), 0) / subs.length) : 0;
-                  const finalAvg = Math.max(localAvg, dashboardData?.average_score || 0);
-                  return `${finalAvg}%`;
+                  return `${Number(dashboardData?.average_score ?? dashboardData?.class_average ?? 0)}%`;
                 })()}
               </div>
               <span style={{ fontSize: '0.8rem', color: '#10b981' }}>Accuracy Rate →</span>

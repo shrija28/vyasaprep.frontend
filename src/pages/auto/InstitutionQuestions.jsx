@@ -30,7 +30,7 @@ const InstitutionQuestions = () => {
 
   const filterForInstitution = useCallback((fetchedList, profile) => {
     if (!Array.isArray(fetchedList)) return [];
-    if (!profile) return fetchedList;
+    if (!profile) return [];
 
     const currentInstId = String(profile?.institution_id || profile?.join_code || profile?.id || '').toLowerCase().trim();
     const currentInstName = String(profile?.institution_name || profile?.name || profile?.username || '').toLowerCase().trim();
@@ -47,7 +47,8 @@ const InstitutionQuestions = () => {
         return Boolean(matchId || matchName);
       }
 
-      // Default: include question returned by institution-authenticated endpoint
+      // The authenticated institution endpoint is already tenant-scoped; many
+      // valid question records omit redundant institution fields.
       return true;
     });
   }, []);
@@ -107,9 +108,13 @@ const InstitutionQuestions = () => {
     setLoading(true);
     setError('');
     try {
+      const backendPageSize = 50;
+      const requestedOffset = (currentPage - 1) * pageSize;
+      const backendPage = Math.floor(requestedOffset / backendPageSize) + 1;
+      const backendOffset = requestedOffset % backendPageSize;
       const params = new URLSearchParams({
-        page: String(currentPage),
-        page_size: String(pageSize),
+        page: String(backendPage),
+        page_size: String(backendPageSize),
       });
       if (filterSubject) params.append('subject', filterSubject);
       if (searchQuery.trim()) params.append('search', searchQuery.trim());
@@ -151,11 +156,13 @@ const InstitutionQuestions = () => {
           });
         }
 
-        setQuestions(filteredList);
+        setQuestions(filteredList.slice(backendOffset, backendOffset + pageSize));
 
         const totalInstCount = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0);
         setTotalQuestions(
-          filterSubject
+          searchQuery.trim()
+            ? filteredList.length
+            : filterSubject
             ? (counts[filterSubject] !== undefined ? counts[filterSubject] : filteredList.length)
             : (totalCountFromBackend || totalInstCount || filteredList.length)
         );
