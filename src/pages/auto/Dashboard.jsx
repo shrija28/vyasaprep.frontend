@@ -6,6 +6,7 @@ import { Bar, Line, Doughnut } from 'react-chartjs-2';
 
 import { generateStudentId } from '../../utils/studentId';
 import { normalizeExamSubjects } from '../../utils/examStore';
+import { buildAiAnalysisFromSubmissions, toNumber } from '../../utils/studentAnalytics';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -56,6 +57,11 @@ const Dashboard = () => {
     try {
       localStorage.removeItem('smartkcet_action_steps');
     } catch (e) {}
+  };
+
+  const getSubmissionScore = (submission) => {
+    const raw = submission?.percentage ?? submission?.score_pct ?? submission?.score_percent ?? submission?.score ?? 0;
+    return Number(raw) || 0;
   };
 
   const fetchDashboardData = async () => {
@@ -120,31 +126,40 @@ const Dashboard = () => {
 
       if (userSubs.length > 0) {
         const totalTaken = userSubs.length;
-        const totalScorePctSum = userSubs.reduce((acc, s) => acc + (Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0), 0);
+        const totalScorePctSum = userSubs.reduce((acc, s) => acc + getSubmissionScore(s), 0);
         const calculatedAvgScore = Math.round(totalScorePctSum / Math.max(1, userSubs.length));
-        const passCount = userSubs.filter(s => (s.status === 'Pass' || (s.percentage || 0) >= 40)).length;
+        const passCount = userSubs.filter(s => {
+          const percentage = getSubmissionScore(s);
+          return s.status === 'Pass' || percentage >= 40;
+        }).length;
         const calculatedPassRate = Math.round((passCount / Math.max(1, userSubs.length)) * 100);
+        const subjectLabels = Array.from(new Set(userSubs.map(s => s.subject || 'General')));
+        const rawAiAnalysis = apiData?.aiAnalysis || apiData?.ai_analysis || apiData?.diagnostic || apiData?.performance_analysis || apiData?.analysis || {};
+        const aiAnalysis = Object.keys(rawAiAnalysis).length > 0
+          ? rawAiAnalysis
+          : buildAiAnalysisFromSubmissions(userSubs);
 
         finalData = {
           has_data: true,
+          aiAnalysis,
           kpis: {
             examsTaken: totalTaken,
             submissions: totalTaken,
             avgScore: calculatedAvgScore,
             passRate: calculatedPassRate,
-            avgTime: Math.round(userSubs.reduce((acc, s) => acc + (s.time_taken_sec || 60), 0) / (userSubs.length * 60)),
+            avgTime: Math.round(userSubs.reduce((acc, s) => acc + (toNumber(s.time_taken_sec ?? s.time_taken ?? 0, 60)), 0) / Math.max(1, userSubs.length * 60)),
             rank: calculatedAvgScore >= 30 ? '#1' : '—'
           },
           topicData: {
-            labels: Array.from(new Set(userSubs.map(s => s.subject || 'General'))),
-            scores: Array.from(new Set(userSubs.map(s => s.subject || 'General'))).map(subj => {
+            labels: subjectLabels,
+            scores: subjectLabels.map(subj => {
               const subList = userSubs.filter(s => (s.subject || 'General') === subj);
-              return Math.round(subList.reduce((acc, s) => acc + (Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0), 0) / subList.length);
+              return Math.round(subList.reduce((acc, s) => acc + getSubmissionScore(s), 0) / subList.length);
             })
           },
           setData: {
             labels: userSubs.slice(0, 7).reverse().map((s, idx) => s.set_label ? `Attempt #${idx + 1}` : 'Exam'),
-            scores: userSubs.slice(0, 7).reverse().map(s => Number(s.percentage !== undefined ? s.percentage : (s.score || 0)) || 0)
+            scores: userSubs.slice(0, 7).reverse().map(s => getSubmissionScore(s))
           },
           passFailData: {
             labels: ['Pass', 'Fail'],
@@ -155,6 +170,7 @@ const Dashboard = () => {
       } else {
         finalData = {
           has_data: false,
+          aiAnalysis: { strong_areas: [], can_improve_areas: [], weak_areas: [] },
           kpis: {
             examsTaken: 0,
             submissions: 0,

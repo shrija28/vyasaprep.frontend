@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { generateStudentId, getAssignedSetForStudent } from '../../utils/studentId';
 import { normalizeExamSubjects } from '../../utils/examStore';
+import { normalizeSubmissionResult } from '../../utils/studentAnalytics';
 
 // High-precision face & liveness analyzer that verifies an actual human face is present
 // and strictly rejects covered cameras, black frames, blank walls, and Windows "Camera Off" placeholders.
@@ -1480,33 +1481,25 @@ const Exam = () => {
         setCameraStream(null);
         setCameraActive(false);
       }
+      const fallbackObj = {
+        score: exactCorrect,
+        total_marks: totalQCount,
+        percentage: exactPercentage,
+        correct_count: exactCorrect,
+        incorrect_count: exactIncorrect,
+        unanswered_count: exactUnanswered,
+        message: data?.message || 'Exam evaluated successfully',
+        autoSubmitted: Boolean(effectiveReason),
+        violationReason: effectiveReason
+      };
+      const finalObj = normalizeSubmissionResult(data || {}, fallbackObj);
+      finalObj.autoSubmitted = Boolean(effectiveReason);
+      finalObj.violationReason = effectiveReason;
       if (res.ok) {
-        const finalObj = {
-          ...data,
-          score: exactCorrect,
-          total_marks: totalQCount,
-          correct_count: exactCorrect,
-          incorrect_count: exactIncorrect,
-          unanswered_count: exactUnanswered,
-          percentage: exactPercentage,
-          autoSubmitted: Boolean(effectiveReason),
-          violationReason: effectiveReason
-        };
         setSubmitResult(finalObj);
         recordLocalSubmission(finalObj);
         setCurrentQ(0);
       } else {
-        const finalObj = {
-          score: exactCorrect,
-          total_marks: totalQCount,
-          percentage: exactPercentage,
-          correct_count: exactCorrect,
-          incorrect_count: exactIncorrect,
-          unanswered_count: exactUnanswered,
-          message: data.message || 'Exam evaluated successfully',
-          autoSubmitted: Boolean(effectiveReason),
-          violationReason: effectiveReason
-        };
         setSubmitResult(finalObj);
         recordLocalSubmission(finalObj);
         setCurrentQ(0);
@@ -1517,7 +1510,7 @@ const Exam = () => {
         setCameraStream(null);
         setCameraActive(false);
       }
-      const finalObj = {
+      const finalObj = normalizeSubmissionResult({}, {
         score: exactCorrect,
         total_marks: totalQCount,
         percentage: exactPercentage,
@@ -1527,7 +1520,7 @@ const Exam = () => {
         message: 'Exam evaluated successfully',
         autoSubmitted: Boolean(effectiveReason),
         violationReason: effectiveReason
-      };
+      });
       setSubmitResult(finalObj);
       recordLocalSubmission(finalObj);
       setCurrentQ(0);
