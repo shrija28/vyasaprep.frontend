@@ -257,6 +257,12 @@ const InstitutionExams = () => {
       return;
     }
 
+    const availableQuestions = Number(questionCounts[subject]);
+    if (Number.isFinite(availableQuestions) && availableQuestions < questionCount) {
+      setError(`Not enough unused questions available for ${subject} (${availableQuestions} available, ${questionCount} required). Please upload more question papers first.`);
+      return;
+    }
+
     setCreating(true);
     setError('');
     setSuccessMsg('');
@@ -302,21 +308,12 @@ const InstitutionExams = () => {
         sets: []
       };
 
-      let res = await fetch('/api/institution/content/exams', {
+      const res = await fetch('/api/institution/content/exams', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) {
-        res = await fetch('/api/institution/exams', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload),
-        });
-      }
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -330,7 +327,12 @@ const InstitutionExams = () => {
         setScheduledEnd('');
       } else {
         const data = await res.json().catch(() => ({}));
-        setError(data.message || data.detail || 'The exam could not be created.');
+        const apiError = data.message || data.detail || data.error;
+        setError(
+          typeof apiError === 'string'
+            ? apiError
+            : apiError?.message || 'The exam could not be created.'
+        );
       }
     } catch (err) {
       setError('Network error creating the exam. No local exam was saved.');
