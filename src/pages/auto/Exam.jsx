@@ -548,9 +548,9 @@ const Exam = () => {
     const totalVal = submitResult.total_marks ?? summary.total ?? questions.length;
     const scoreVal = submitResult.score ?? summary.score ?? 0;
     const pctVal = submitResult.percentage ?? summary.percentage ?? Math.round((scoreVal / Math.max(1, totalVal)) * 100);
-    const correctCount = submitResult.correct_count ?? summary.score ?? scoreVal;
-    const incorrectCount = submitResult.incorrect_count ?? Math.max(0, totalVal - scoreVal - (submitResult.unanswered_count || 0));
-    const unansCount = submitResult.unanswered_count ?? Math.max(0, totalVal - (correctCount + incorrectCount));
+    const correctCount = submitResult.correct_count ?? summary.correct_count ?? scoreVal;
+    const incorrectCount = submitResult.incorrect_count ?? summary.incorrect_count ?? 0;
+    const unansCount = submitResult.unanswered_count ?? summary.unanswered_count ?? Math.max(0, totalVal - correctCount - incorrectCount);
     return {
       score: scoreVal,
       total: totalVal,
@@ -1331,7 +1331,12 @@ const Exam = () => {
                 topic: q.topic || 'General',
                 subtype: q.subtype || 'theory_definition',
                 explanation: q.exp || q.explanation || '',
-                marks: q.marks || 1
+                marks: q.marks || 1,
+                // correct_option is the 0-based index of the right answer ("0","1","2","3").
+                // Stored here so handleSubmitExam can compute an accurate local score
+                // that matches the backend's evaluation. Without this the frontend
+                // defaults every correct answer to index 0 and produces wrong counts.
+                correct_option: q.ans !== undefined ? String(q.ans) : undefined,
               })));
               if (data.subject) setSubject(data.subject);
               if (data.set_label) setSetLabel(data.set_label);
@@ -1481,14 +1486,19 @@ const Exam = () => {
         setCameraActive(false);
       }
       if (res.ok) {
+        // Use the backend's authoritative evaluation as the primary source.
+        // The backend runs score_submission() which correctly compares each
+        // submitted answer index against the stored correct_option index.
+        // Only fall back to the locally-computed values when the backend
+        // response is missing a field (e.g. older API version).
         const finalObj = {
           ...data,
-          score: exactCorrect,
-          total_marks: totalQCount,
-          correct_count: exactCorrect,
-          incorrect_count: exactIncorrect,
-          unanswered_count: exactUnanswered,
-          percentage: exactPercentage,
+          score:           data.score           ?? data.correct_count ?? exactCorrect,
+          total_marks:     data.total_marks      ?? totalQCount,
+          correct_count:   data.correct_count    ?? exactCorrect,
+          incorrect_count: data.incorrect_count  ?? exactIncorrect,
+          unanswered_count:data.unanswered_count ?? exactUnanswered,
+          percentage:      data.percentage       ?? exactPercentage,
           autoSubmitted: Boolean(effectiveReason),
           violationReason: effectiveReason
         };
